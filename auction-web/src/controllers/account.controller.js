@@ -5,10 +5,7 @@ import * as watchlistModel from '../models/watchlist.model.js';
 import * as reviewModel from '../models/review.model.js';
 import * as autoBiddingModel from '../models/autoBidding.model.js';
 import { sendMail } from '../utils/mailer.js';
-
-function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
+import { generateAndSendOtp } from '../services/otp.service.js';
 
 export const getRatings = async (req, res) => {
   const currentUserId = req.session.authUser.id;
@@ -69,22 +66,11 @@ export const postForgotPassword = async (req, res) => {
       error_message: 'Email not found.',
     });
   }
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  await userModel.createOtp({
-    user_id: user.id,
-    otp_code: otp,
+  await generateAndSendOtp({
+    user,
     purpose: 'reset_password',
-    expires_at: expiresAt,
-  });
-  await sendMail({
-    to: email,
-    subject: 'Password Reset for Your Online Auction Account',
-    html: `
-      <p>Hi ${user.fullname},</p>
-      <p>Your OTP code for password reset is: <strong>${otp}</strong></p>
-      <p>This code will expire in 15 minutes.</p>
-    `,
+    emailSubject: 'Password Reset for Your Online Auction Account',
+    recipientEmail: email,
   });
   return res.render('vwAccount/auth/verify-forgot-password-otp', {
     email,
@@ -120,22 +106,11 @@ export const postResendForgotPasswordOtp = async (req, res) => {
       error_message: 'User not found.',
     });
   }
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  await userModel.createOtp({
-    user_id: user.id,
-    otp_code: otp,
+  await generateAndSendOtp({
+    user,
     purpose: 'reset_password',
-    expires_at: expiresAt,
-  });
-  await sendMail({
-    to: email,
-    subject: 'New OTP for Password Reset',
-    html: `
-      <p>Hi ${user.fullname},</p>
-      <p>Your new OTP code for password reset is: <strong>${otp}</strong></p>
-      <p>This code will expire in 15 minutes.</p>
-    `,
+    emailSubject: 'New OTP for Password Reset',
+    recipientEmail: email,
   });
   return res.render('vwAccount/auth/verify-forgot-password-otp', {
     email,
@@ -185,24 +160,11 @@ export const postSignin = async (req, res) => {
   }
 
   if (!user.email_verified) {
-    const otp = generateOtp();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-
-    await userModel.createOtp({
-      user_id: user.id,
-      otp_code: otp,
+    await generateAndSendOtp({
+      user,
       purpose: 'verify_email',
-      expires_at: expiresAt,
-    });
-
-    await sendMail({
-      to: email,
-      subject: 'Verify your Online Auction account',
-      html: `
-        <p>Hi ${user.fullname},</p>
-        <p>Your OTP code is: <strong>${otp}</strong></p>
-        <p>This code will expire in 15 minutes.</p>
-      `,
+      emailSubject: 'Verify your Online Auction account',
+      recipientEmail: email,
     });
 
     return res.redirect(
@@ -275,34 +237,19 @@ export const postSignup = async (req, res) => {
 
   const newUser = await userModel.add(user);
 
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-
-  console.log('User id: ', newUser.id, ' OTP: ', otp);
-
-  await userModel.createOtp({
-    user_id: newUser.id,
-    otp_code: otp,
-    purpose: 'verify_email',
-    expires_at: expiresAt,
-  });
-
   const verifyUrl = `${process.env.APP_BASE_URL}/account/verify-email?email=${encodeURIComponent(
     email
   )}`;
 
-  await sendMail({
-    to: email,
-    subject: 'Verify your Online Auction account',
-    html: `
-        <p>Hi ${fullname},</p>
-        <p>Thank you for registering at Online Auction.</p>
-        <p>Your OTP code is: <strong>${otp}</strong></p>
-        <p>This code will expire in 15 minutes.</p>
-        <p>You can enter this code on the verification page, or click the link below:</p>
-        <p><a href="${verifyUrl}">Verify your email</a></p>
-        <p>If you did not register, please ignore this email.</p>
-        `,
+  await generateAndSendOtp({
+    user: newUser,
+    purpose: 'verify_email',
+    emailSubject: 'Verify your Online Auction account',
+    recipientEmail: email,
+    recipientName: fullname,
+    extraHtml: `
+      <p>Thank you for registering at Online Auction.</p>
+    `,
   });
 
   return res.redirect(
@@ -359,24 +306,11 @@ export const postResendOtp = async (req, res) => {
     });
   }
 
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-
-  await userModel.createOtp({
-    user_id: user.id,
-    otp_code: otp,
+  await generateAndSendOtp({
+    user,
     purpose: 'verify_email',
-    expires_at: expiresAt,
-  });
-
-  await sendMail({
-    to: email,
-    subject: 'New OTP for email verification',
-    html: `
-      <p>Hi ${user.fullname},</p>
-      <p>Your new OTP code is: <strong>${otp}</strong></p>
-      <p>This code will expire in 15 minutes.</p>
-    `,
+    emailSubject: 'New OTP for email verification',
+    recipientEmail: email,
   });
 
   return res.render('vwAccount/verify-otp', {
