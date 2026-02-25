@@ -100,20 +100,6 @@ export const postAddProduct = async (req, res) => {
     res.redirect('/seller/products/add');
 };
 
-export const postUploadThumbnail = async (req, res) => {
-    res.json({
-        success: true,
-        file: req.file
-    });
-};
-
-export const postUploadSubimages = async (req, res) => {
-    res.json({
-        success: true,
-        files: req.files
-    });
-};
-
 export const postCancelProduct = async (req, res) => {
     try {
         const productId = req.params.id;

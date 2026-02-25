@@ -75,17 +75,3 @@ export const postDelete = async (req, res) => {
     req.session.success_message = 'Product deleted successfully!';
     res.redirect('/admin/products/list');
 };
-
-export const postUploadThumbnail = async (req, res) => {
-    res.json({
-        success: true,
-        file: req.file
-    });
-};
-
-export const postUploadSubimages = async (req, res) => {
-    res.json({
-        success: true,
-        files: req.files
-    });
-};
