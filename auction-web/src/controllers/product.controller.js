@@ -71,125 +71,29 @@ export const getSearch = async (req, res) => {
 
 
 export const getDetail = async (req, res) => {
-  const userId = req.session.authUser ? req.session.authUser.id : null;
+  const userId = req.session.authUser?.id || null;
   const productId = req.query.id;
-  const product = await productModel.findByProductId2(productId, userId);
-  const related_products = await productModel.findRelatedProducts(productId);
-  
-  if (!product) {
-    return res.status(404).render('404', { message: 'Product not found' });
-  }
-  console.log('Product details:', product);
-  const now = new Date();
-  const endDate = new Date(product.end_at);
-  let productStatus = 'ACTIVE';
-  
-  if (endDate <= now && !product.closed_at && product.is_sold === null) {
-    await productModel.updateProduct(productId, { closed_at: endDate });
-    product.closed_at = endDate;
-  }
-  
-  if (product.is_sold === true) {
-    productStatus = 'SOLD';
-  } else if (product.is_sold === false) {
-    productStatus = 'CANCELLED';
-  } else if ((endDate <= now || product.closed_at) && product.highest_bidder_id) {
-    productStatus = 'PENDING';
-  } else if (endDate <= now && !product.highest_bidder_id) {
-    productStatus = 'EXPIRED';
-  } else if (endDate > now && !product.closed_at) {
-    productStatus = 'ACTIVE';
-  }
-
-  if (productStatus !== 'ACTIVE') {
-    if (!userId) {
-      return res.status(403).render('403', { message: 'You do not have permission to view this product' });
-    }
-    
-    const isSeller = product.seller_id === userId;
-    const isHighestBidder = product.highest_bidder_id === userId;
-    
-    if (!isSeller && !isHighestBidder) {
-      return res.status(403).render('403', { message: 'You do not have permission to view this product' });
-    }
-  }
-
   const commentPage = parseInt(req.query.commentPage) || 1;
-  const commentsPerPage = 2;
-  const offset = (commentPage - 1) * commentsPerPage;
 
-  const [descriptionUpdates, biddingHistory, comments, totalComments] = await Promise.all([
-    productDescUpdateModel.findByProductId(productId),
-    biddingHistoryModel.getBiddingHistory(productId),
-    productCommentModel.getCommentsByProductId(productId, commentsPerPage, offset),
-    productCommentModel.countCommentsByProductId(productId)
-  ]);
+  const viewModel =
+    await productService.getProductDetail(
+      productId,
+      userId,
+      commentPage
+    );
 
-  let rejectedBidders = [];
-  if (req.session.authUser && product.seller_id === req.session.authUser.id) {
-    rejectedBidders = await rejectedBidderModel.getRejectedBidders(productId);
-  }
-  
-  if (comments.length > 0) {
-    const commentIds = comments.map(c => c.id);
-    const allReplies = await productCommentModel.getRepliesByCommentIds(commentIds);
-    
-    const repliesMap = new Map();
-    for (const reply of allReplies) {
-      if (!repliesMap.has(reply.parent_id)) {
-        repliesMap.set(reply.parent_id, []);
-      }
-      repliesMap.get(reply.parent_id).push(reply);
-    }
-    
-    for (const comment of comments) {
-      comment.replies = repliesMap.get(comment.id) || [];
-    }
-  }
-  
-  const totalPages = Math.ceil(totalComments / commentsPerPage);
-  
-  const success_message = req.session.success_message;
-  const error_message = req.session.error_message;
+  if (!viewModel)
+    return res.status(404).render('404');
+
+  res.render('vwProduct/details', {
+    ...viewModel,
+    authUser: req.session.authUser,
+    success_message: req.session.success_message,
+    error_message: req.session.error_message,
+  });
+
   delete req.session.success_message;
   delete req.session.error_message;
-
-  const sellerRatingObject = await reviewModel.calculateRatingPoint(product.seller_id);
-  const sellerReviews = await reviewModel.getReviewsByUserId(product.seller_id);
-  
-  let bidderRatingObject = { rating_point: null };
-  let bidderReviews = [];
-  if (product.highest_bidder_id) {
-    bidderRatingObject = await reviewModel.calculateRatingPoint(product.highest_bidder_id);
-    bidderReviews = await reviewModel.getReviewsByUserId(product.highest_bidder_id);
-  }
-  
-  let showPaymentButton = false;
-  if (req.session.authUser && productStatus === 'PENDING') {
-    const userId = req.session.authUser.id;
-    showPaymentButton = (product.seller_id === userId || product.highest_bidder_id === userId);
-  }
-  
-  res.render('vwProduct/details', { 
-    product,
-    productStatus,
-    authUser: req.session.authUser,
-    descriptionUpdates,
-    biddingHistory,
-    rejectedBidders,
-    comments,
-    success_message,
-    error_message,
-    related_products,
-    seller_rating_point: sellerRatingObject.rating_point,
-    seller_has_reviews: sellerReviews.length > 0,
-    bidder_rating_point: bidderRatingObject.rating_point,
-    bidder_has_reviews: bidderReviews.length > 0,
-    commentPage,
-    totalPages,
-    totalComments,
-    showPaymentButton
-  });
 };
 
 export const getBiddingHistory = async (req, res) => {

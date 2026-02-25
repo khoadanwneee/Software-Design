@@ -1,6 +1,11 @@
 import * as productModel from '../models/product.model.js';
 import { getPagination, buildPaginationInfo } from '../utils/pagination.js';
 import * as systemSettingModel from '../models/systemSetting.model.js';
+import * as descriptionService from './productdescription.service.js';
+import * as biddingService from './bidding.service.js';
+import * as commentService from './comment.service.js';
+import * as ratingService from './rating.service.js';
+import * as rejectedBidderService from './rejectedBidder.service.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -197,5 +202,134 @@ export async function getSearchProducts({
     to,
     currentPage: page,
     totalPages
+  };
+}
+
+
+const rules = [
+  {
+    match: (p) => p.is_sold === true,
+    status: 'SOLD'
+  },
+  {
+    match: (p) => p.is_sold === false,
+    status: 'CANCELLED'
+  },
+  {
+    match: (p) => {
+      const now = new Date();
+      const endDate = new Date(p.end_at);
+      return (endDate <= now || p.closed_at) && p.highest_bidder_id;
+    },
+    status: 'PENDING'
+  }
+];
+
+export function determineProductStatus(product) {
+  const rule = rules.find(r => r.match(product));
+  return rule ? rule.status : 'ACTIVE';
+}
+
+function canViewProduct(productStatus, product, userId) {
+  if (productStatus === 'ACTIVE') return true;
+  if (!userId) return false;
+
+  return (
+    product.seller_id === userId ||
+    product.highest_bidder_id === userId
+  );
+}
+
+async function autoCloseIfExpired(product) {
+  const now = new Date();
+  const endDate = new Date(product.end_at);
+
+  if (endDate <= now && !product.closed_at && product.is_sold === null) {
+    await productModel.updateProduct(product.id, { closed_at: endDate });
+    product.closed_at = endDate;
+  }
+}
+
+
+export async function getProduct(productId, userId) {
+  return productModel.findByProductId2(productId, userId);
+}
+
+export async function getRelatedProducts(productId) {
+  return productModel.findRelatedProducts(productId);
+}
+
+export async function getProductDetail(productId, userId, commentPage = 1) {
+
+  const product = await getProduct(productId, userId);
+  if (!product) return null;
+
+  
+  await autoCloseIfExpired(product);
+
+  const productStatus = determineProductStatus(product);
+
+
+  if (!canViewProduct(productStatus, product, userId)) {
+    throw new Error('FORBIDDEN');
+  }
+
+  const commentsPerPage = 2;
+
+  const [
+    related_products,
+    descriptionUpdates,
+    biddingHistory,
+    commentData,
+    sellerRating
+  ] = await Promise.all([
+    getRelatedProducts(productId),
+    descriptionService.getDescriptionUpdates(productId),
+    biddingService.getBiddingHistory(productId),
+    commentService.getCommentsWithReplies(productId, commentPage, commentsPerPage),
+    ratingService.getUserRating(product.seller_id),
+  ]);
+
+  let bidderRating = { rating_point: null, has_reviews: false };
+  if (product.highest_bidder_id) {
+    bidderRating = await ratingService.getUserRating(product.highest_bidder_id);
+  }
+
+  let rejectedBidders = [];
+  if (userId && product.seller_id === userId) {
+    rejectedBidders =
+      await rejectedBidderService.getRejectedBidders(productId);
+  }
+
+
+  const showPaymentButton =
+    userId &&
+    productStatus === 'PENDING' &&
+    (
+      product.seller_id === userId ||
+      product.highest_bidder_id === userId
+    );
+
+  return {
+    product,
+    productStatus,
+
+    related_products,
+    descriptionUpdates,
+    biddingHistory,
+    rejectedBidders,
+
+    comments: commentData.comments,
+    totalComments: commentData.totalComments,
+    totalPages: Math.ceil(commentData.totalComments / commentsPerPage),
+    commentPage,
+
+    seller_rating_point: sellerRating.rating_point,
+    seller_has_reviews: sellerRating.has_reviews,
+
+    bidder_rating_point: bidderRating.rating_point,
+    bidder_has_reviews: bidderRating.has_reviews,
+
+    showPaymentButton
   };
 }
