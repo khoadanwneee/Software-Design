@@ -1,4 +1,6 @@
 import * as productModel from '../models/product.model.js';
+import { getPagination, buildPaginationInfo } from '../utils/pagination.js';
+import * as systemSettingModel from '../models/systemSetting.model.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -89,4 +91,111 @@ export async function createProductWithImages(productData, thumbnailPath, imgsLi
     await moveAndSaveSubimages(productId, imgsList);
 
     return productId;
+}
+
+
+export async function prepareProductList(products) {
+  const now = new Date();
+  if (!products) return [];
+  
+  const settings = await systemSettingModel.getSettings();
+  const N_MINUTES = settings.new_product_limit_minutes;
+  
+  return products.map(product => {
+    const created = new Date(product.created_at);
+    const isNew = (now - created) < (N_MINUTES * 60 * 1000);
+
+    return {
+      ...product,
+      is_new: isNew
+    };
+  });
+};
+
+
+
+export async function getProductByCategory({categoryIds, category, query, sort, userId}) 
+{
+  const { page, limit, offset } = getPagination(query, 3);
+  
+
+  const list = await productModel.findByCategoryIds(
+    categoryIds,
+    limit,
+    offset,
+    sort,
+    userId
+  );
+
+  const products = await prepareProductList(list);
+
+  const total = await productModel.countByCategoryIds(categoryIds);
+  const totalCount = parseInt(total.count) || 0;
+
+  const { totalPages, from, to } = buildPaginationInfo(page, limit, totalCount);
+
+  return {
+    products,
+    totalCount,
+    from,
+    to,
+    currentPage: page,
+    totalPages,
+    categoryId: category.id,
+    categoryName: category.name,
+    sort
+  };
+}
+
+
+export async function getSearchProducts({
+  q,
+  query,
+  userId,
+  logic = 'and',
+  sort = ''
+}) {
+
+  if (!q || q.trim().length === 0) {
+    return {
+      products: [],
+      totalCount: 0,
+      from: 0,
+      to: 0,
+      currentPage: 1,
+      totalPages: 0,
+    };
+  }
+
+  
+  const { page, limit, offset } = getPagination(query, 3);
+
+  const keywords = q.trim();
+
+  
+  const list = await productModel.searchPageByKeywords(
+    keywords,
+    limit,
+    offset,
+    userId,
+    logic,
+    sort
+  );
+
+  const products = await prepareProductList(list);
+
+
+  const total = await productModel.countByKeywords(keywords, logic);
+  const totalCount = parseInt(total.count) || 0;
+
+  const { totalPages, from, to } = buildPaginationInfo(page, limit, totalCount);
+
+  return {
+    products,
+    totalCount,
+    from,
+    to,
+    currentPage: page,
+    totalPages
+  };
 }

@@ -12,118 +12,63 @@ import * as rejectedBidderModel from '../models/rejectedBidder.model.js';
 import * as orderModel from '../models/order.model.js';
 import * as invoiceModel from '../models/invoice.model.js';
 import * as orderChatModel from '../models/orderChat.model.js';
+import * as categoryService from '../services/category.service.js';
+import * as productService from '../services/product.service.js';
+import { getPagination} from '../utils/pagination.js';
+import { prepareProductList } from '../services/product.service.js';
 import { sendMail } from '../utils/mailer.js';
 import db from '../utils/db.js';
 import path from 'path';
 
-const prepareProductList = async (products) => {
-  const now = new Date();
-  if (!products) return [];
-  
-  const settings = await systemSettingModel.getSettings();
-  const N_MINUTES = settings.new_product_limit_minutes;
-  
-  return products.map(product => {
-    const created = new Date(product.created_at);
-    const isNew = (now - created) < (N_MINUTES * 60 * 1000);
 
-    return {
-      ...product,
-      is_new: isNew
-    };
-  });
-};
 
 export const getCategory = async (req, res) => {
-  const userId = req.session.authUser ? req.session.authUser.id : null;
-  const sort = req.query.sort || '';
+  const userId = req.session.authUser?.id || null;
   const categoryId = req.query.catid;
-  const page = parseInt(req.query.page) || 1;
-  const limit = 3;
-  const offset = (page - 1) * limit;
-  
-  const category = await categoryModel.findByCategoryId(categoryId);
-  
-  let categoryIds = [categoryId];
-  
-  if (category && category.parent_id === null) {
-    const childCategories = await categoryModel.findChildCategoryIds(categoryId);
-    const childIds = childCategories.map(cat => cat.id);
-    categoryIds = [categoryId, ...childIds];
+  const sort = req.query.sort || '';
+
+  const categoryData =
+    await categoryService.getCategoryWithResolvedIds(categoryId);
+
+  if (!categoryData) {
+    return res.status(404).render('404');
   }
-  
-  const list = await productModel.findByCategoryIds(categoryIds, limit, offset, sort, userId);
-  const products = await prepareProductList(list);
-  const total = await productModel.countByCategoryIds(categoryIds);
-  console.log('Total products in category:', total.count);
-  const totalCount = parseInt(total.count) || 0;
-  const nPages = Math.ceil(totalCount / limit);
-  let from = (page - 1) * limit + 1;
-  let to = page * limit;
-  if (to > totalCount) to = totalCount;
-  if (totalCount === 0) { from = 0; to = 0; }
-  res.render('vwProduct/list', { 
-    products: products,
-    totalCount,
-    from,
-    to,
-    currentPage: page,
-    totalPages: nPages,
-    categoryId: categoryId,
-    categoryName: category ? category.name : null,
-    sort: sort,
+
+  const data = await productService.getProductByCategory({
+    categoryIds: categoryData.categoryIds,
+    category: categoryData.category,
+    query: req.query,
+    sort,
+    userId
   });
+
+  res.render('vwProduct/list', data);
 };
 
 export const getSearch = async (req, res) => {
-  const userId = req.session.authUser ? req.session.authUser.id : null;
+  const userId = req.session.authUser?.id || null;
+
   const q = req.query.q || '';
   const logic = req.query.logic || 'and';
   const sort = req.query.sort || '';
-  
-  if (q.length === 0) {
-    return res.render('vwProduct/list', {
-        q: q,
-        logic: logic,
-        sort: sort,
-        products: [],
-        totalCount: 0,
-        from: 0,
-        to: 0,
-        currentPage: 1,
-        totalPages: 0,
-    });
-  }
 
-  const limit = 3;
-  const page = parseInt(req.query.page) || 1;
-  const offset = (page - 1) * limit;
+  const result = await productService.getSearchProducts({
+    q,
+    query: req.query,  
+    userId,
+    logic,
+    sort
+  });
   
-  const keywords = q.trim();
-  
-  const list = await productModel.searchPageByKeywords(keywords, limit, offset, userId, logic, sort);
-  const products = await prepareProductList(list);
-  const total = await productModel.countByKeywords(keywords, logic);
-  const totalCount = parseInt(total.count) || 0;
-  
-  const nPages = Math.ceil(totalCount / limit);
-  let from = (page - 1) * limit + 1;
-  let to = page * limit;
-  if (to > totalCount) to = totalCount;
-  if (totalCount === 0) { from = 0; to = 0; }
-  
-  res.render('vwProduct/list', { 
-    products: products,
-    totalCount,
-    from,
-    to,
-    currentPage: page,
-    totalPages: nPages,
-    q: q,
-    logic: logic,
-    sort: sort,
+  res.render('vwProduct/list', {
+    ...result,
+    q,
+    logic,
+    sort
   });
 };
+
+
 
 export const getDetail = async (req, res) => {
   const userId = req.session.authUser ? req.session.authUser.id : null;
