@@ -61,29 +61,37 @@ export const getSearch = async (req, res) => {
 
 
 export const getDetail = async (req, res) => {
-  const userId = req.session.authUser?.id || null;
-  const productId = req.query.id;
-  const commentPage = parseInt(req.query.commentPage) || 1;
+  try {
+    const userId = req.session.authUser?.id || null;
+    const productId = req.query.id;
+    const commentPage = parseInt(req.query.commentPage) || 1;
 
-  const viewModel =
-    await productService.getProductDetail(
-      productId,
-      userId,
-      commentPage
-    );
+    const viewModel =
+      await productService.getProductDetail(
+        productId,
+        userId,
+        commentPage
+      );
 
-  if (!viewModel)
-    return res.status(404).render('404');
+    if (!viewModel)
+      return res.status(404).render('404');
 
-  res.render('vwProduct/details', {
-    ...viewModel,
-    authUser: req.session.authUser,
-    success_message: req.session.success_message,
-    error_message: req.session.error_message,
-  });
+    res.render('vwProduct/details', {
+      ...viewModel,
+      authUser: req.session.authUser,
+      success_message: req.session.success_message,
+      error_message: req.session.error_message,
+    });
 
-  delete req.session.success_message;
-  delete req.session.error_message;
+    delete req.session.success_message;
+    delete req.session.error_message;
+
+  } catch (err) {
+
+    if (err.message === 'FORBIDDEN') {
+      return res.status(403).render('403', { message: 'You do not have permission to view this product' });
+    }
+  }
 };
 
 export const getBiddingHistory = async (req, res) => {
