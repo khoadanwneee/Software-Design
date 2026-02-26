@@ -419,58 +419,66 @@ export const postBuyNow = async (req, res) => {
   }
 };
 
-export const getSellerRatings = async (req, res) => {
-  try {
-    const sellerId = parseInt(req.params.sellerId);
-    
-    if (!sellerId) {
-      return res.redirect('/');
-    }
-    
-    const seller = await userModel.findById(sellerId);
-    if (!seller) {
-      return res.redirect('/');
-    }
-    
-    const ratingDetails = await ratingService.getRatingDetails(sellerId);
-    
-    res.render('vwProduct/seller-ratings', {
-      sellerName: seller.fullname,
-      ...ratingDetails
-    });
-    
-  } catch (error) {
-    console.error('Error loading seller ratings page:', error);
-    res.redirect('/');
-  }
+/**
+ * DRY Fix: Hợp nhất getSellerRatings và getBidderRatings thành một hàm duy nhất.
+ * Lý do: Hai hàm cũ có logic gần giống nhau (get user → get ratings → render),
+ * chỉ khác paramName, cách hiển thị tên, và labels trong view.
+ * Giờ dùng chung 1 view template "vwProduct/user-ratings" với các biến động.
+ */
+const RATING_ROLE_CONFIG = {
+  seller: {
+    paramName: 'sellerId',
+    userRole: 'Seller',
+    lowerUserRole: 'seller',
+    reviewerRole: 'buyers',
+    maskName: false,
+  },
+  bidder: {
+    paramName: 'bidderId',
+    userRole: 'Bidder',
+    lowerUserRole: 'bidder',
+    reviewerRole: 'sellers',
+    maskName: true,
+  },
 };
 
-export const getBidderRatings = async (req, res) => {
-  try {
-    const bidderId = parseInt(req.params.bidderId);
-    
-    if (!bidderId) {
-      return res.redirect('/');
+function maskUserName(fullname) {
+  if (!fullname) return '';
+  return fullname.split('').map((char, index) => 
+    index % 2 === 0 ? char : '*'
+  ).join('');
+}
+
+export function createGetUserRatings(role) {
+  const config = RATING_ROLE_CONFIG[role];
+
+  return async (req, res) => {
+    try {
+      const userId = parseInt(req.params[config.paramName]);
+
+      if (!userId) {
+        return res.redirect('/');
+      }
+
+      const user = await userModel.findById(userId);
+      if (!user) {
+        return res.redirect('/');
+      }
+
+      const ratingDetails = await ratingService.getRatingDetails(userId);
+      const userName = config.maskName ? maskUserName(user.fullname) : user.fullname;
+
+      res.render('vwProduct/user-ratings', {
+        userName,
+        userRole: config.userRole,
+        lowerUserRole: config.lowerUserRole,
+        reviewerRole: config.reviewerRole,
+        ...ratingDetails,
+      });
+
+    } catch (error) {
+      console.error(`Error loading ${config.lowerUserRole} ratings page:`, error);
+      res.redirect('/');
     }
-    
-    const bidder = await userModel.findById(bidderId);
-    if (!bidder) {
-      return res.redirect('/');
-    }
-    
-    const ratingDetails = await ratingService.getRatingDetails(bidderId);
-    
-    const maskedName = bidder.fullname ? bidder.fullname.split('').map((char, index) => 
-      index % 2 === 0 ? char : '*'
-    ).join('') : '';
-    
-    res.render('vwProduct/bidder-ratings', {
-      bidderName: maskedName,
-      ...ratingDetails
-    });
-    
-  } catch (error) {
-    console.error('Error loading bidder ratings page:', error);
-    res.redirect('/');
-  }
-};
+  };
+}

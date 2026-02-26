@@ -77,8 +77,8 @@ router.post('/unreject-bidder', isAuthenticated, productController.postUnrejectB
 // Buy now
 router.post('/buy-now', isAuthenticated, productController.postBuyNow);
 
-// Ratings pages
-router.get('/seller/:sellerId/ratings', productController.getSellerRatings);
-router.get('/bidder/:bidderId/ratings', productController.getBidderRatings);
+// Ratings pages (DRY: dùng chung createGetUserRatings thay vì 2 handler riêng)
+router.get('/seller/:sellerId/ratings', productController.createGetUserRatings('seller'));
+router.get('/bidder/:bidderId/ratings', productController.createGetUserRatings('bidder'));
 
 export default router;
