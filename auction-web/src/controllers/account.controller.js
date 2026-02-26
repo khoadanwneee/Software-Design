@@ -4,7 +4,6 @@ import * as upgradeRequestModel from '../models/upgradeRequest.model.js';
 import * as watchlistModel from '../models/watchlist.model.js';
 import * as reviewModel from '../models/review.model.js';
 import * as autoBiddingModel from '../models/autoBidding.model.js';
-import { sendMail } from '../utils/mailer.js';
 import { generateAndSendOtp } from '../services/otp.service.js';
 import * as ratingService from '../services/rating.service.js';
 

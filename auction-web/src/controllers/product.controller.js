@@ -2,16 +2,13 @@ import * as productModel from '../models/product.model.js';
 import * as userModel from '../models/user.model.js';
 import * as watchListModel from '../models/watchlist.model.js';
 import * as biddingHistoryModel from '../models/biddingHistory.model.js';
-import * as categoryModel from '../models/category.model.js';
-import * as rejectedBidderModel from '../models/rejectedBidder.model.js';
 import * as categoryService from '../services/category.service.js';
 import * as productService from '../services/product.service.js';
 import * as orderService from '../services/order.service.js';
 import * as ratingService from '../services/rating.service.js';
 import * as biddingService from '../services/bidding.service.js';
 import * as commentService from '../services/comment.service.js';
-import { getPagination} from '../utils/pagination.js';
-import { prepareProductList } from '../services/product.service.js';
+
 
 
 
@@ -64,29 +61,37 @@ export const getSearch = async (req, res) => {
 
 
 export const getDetail = async (req, res) => {
-  const userId = req.session.authUser?.id || null;
-  const productId = req.query.id;
-  const commentPage = parseInt(req.query.commentPage) || 1;
+  try {
+    const userId = req.session.authUser?.id || null;
+    const productId = req.query.id;
+    const commentPage = parseInt(req.query.commentPage) || 1;
 
-  const viewModel =
-    await productService.getProductDetail(
-      productId,
-      userId,
-      commentPage
-    );
+    const viewModel =
+      await productService.getProductDetail(
+        productId,
+        userId,
+        commentPage
+      );
 
-  if (!viewModel)
-    return res.status(404).render('404');
+    if (!viewModel)
+      return res.status(404).render('404');
 
-  res.render('vwProduct/details', {
-    ...viewModel,
-    authUser: req.session.authUser,
-    success_message: req.session.success_message,
-    error_message: req.session.error_message,
-  });
+    res.render('vwProduct/details', {
+      ...viewModel,
+      authUser: req.session.authUser,
+      success_message: req.session.success_message,
+      error_message: req.session.error_message,
+    });
 
-  delete req.session.success_message;
-  delete req.session.error_message;
+    delete req.session.success_message;
+    delete req.session.error_message;
+
+  } catch (err) {
+
+    if (err.message === 'FORBIDDEN') {
+      return res.status(403).render('403', { message: 'You do not have permission to view this product' });
+    }
+  }
 };
 
 export const getBiddingHistory = async (req, res) => {
@@ -144,10 +149,8 @@ export const postBid = async (req, res) => {
   const bidAmount = parseFloat(req.body.bidAmount.replace(/,/g, ''));
 
   try {
-    const result = await biddingService.placeBid(productId, userId, bidAmount);
-
     const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
-    biddingService.sendBidNotificationEmails(result, productUrl);
+    const result = await biddingService.placeBid(productId, userId, bidAmount, productUrl);
 
     req.session.success_message = biddingService.buildBidResultMessage(result);
     res.redirect(`/products/detail?id=${productId}`);
@@ -390,27 +393,8 @@ export const postRejectBidder = async (req, res) => {
 export const postUnrejectBidder = async (req, res) => {
   const { productId, bidderId } = req.body;
   const sellerId = req.session.authUser.id;
-
   try {
-    const product = await productModel.findByProductId2(productId, sellerId);
-    
-    if (!product) {
-      throw new Error('Product not found');
-    }
-
-    if (product.seller_id !== sellerId) {
-      throw new Error('Only the seller can unreject bidders');
-    }
-
-    const now = new Date();
-    const endDate = new Date(product.end_at);
-    
-    if (product.is_sold !== null || endDate <= now || product.closed_at) {
-      throw new Error('Can only unreject bidders for active auctions');
-    }
-
-    await rejectedBidderModel.unrejectBidder(productId, bidderId);
-
+    await biddingService.unrejectBidder(productId, bidderId, sellerId);
     res.json({ success: true, message: 'Bidder can now bid on this product again' });
   } catch (error) {
     console.error('Error unrejecting bidder:', error);
