@@ -4,10 +4,6 @@ import { buildProductData, createProductWithImages } from '../../services/produc
 
 export const getList = async (req, res) => {
     const products = await productModel.findAll();
-    const success_message = req.session.success_message;
-    const error_message = req.session.error_message;
-    delete req.session.success_message;
-    delete req.session.error_message;
     const filteredProducts = products.map(p => ({
         id: p.id,
         name: p.name,
@@ -17,9 +13,7 @@ export const getList = async (req, res) => {
     }));
     res.render('vwAdmin/product/list', {
         products : filteredProducts,
-        empty: products.length === 0,
-        success_message,
-        error_message
+        empty: products.length === 0
     });
 };
 
@@ -48,10 +42,6 @@ export const postAdd = async (req, res) => {
 export const getDetail = async (req, res) => {
     const id = req.params.id;
     const product = await productModel.findByProductIdForAdmin(id);
-    const success_message = req.session.success_message;
-    const error_message = req.session.error_message;
-    delete req.session.success_message;
-    delete req.session.error_message;
     res.render('vwAdmin/product/detail', { product } );
 };
 

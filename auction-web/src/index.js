@@ -26,6 +26,7 @@ import adminSystemRouter from './routes/admin/system.route.js';
 import sellerRouter from './routes/seller.route.js';
 // Import Middlewares
 import { isAuthenticated, isSeller, isAdmin } from './middlewares/auth.mdw.js';
+import { flashMessages } from './middlewares/flash.mdw.js';
 import * as categoryModel from './models/category.model.js';
 import * as userModel from './models/user.model.js';
 
@@ -293,7 +294,10 @@ const fileFilter = (req, file, cb) => {
 // 3. MIDDLEWARE TOÀN CỤC (Chạy cho mọi request)
 // ============================================================
 
-// 3.1. Middleware User Info
+// 3.1. Flash Messages Middleware
+app.use(flashMessages);
+
+// 3.2. Middleware User Info
 app.use(async function (req, res, next) {
   if (typeof req.session.isAuthenticated === 'undefined') {
     req.session.isAuthenticated = false;
@@ -332,7 +336,7 @@ app.use(async function (req, res, next) {
   next();
 });
 
-// 3.2. Middleware Category (Chỉ load cho Client)
+// 3.3. Middleware Category (Chỉ load cho Client)
 app.use(async function (req, res, next) {
   const plist = await categoryModel.findLevel1Categories();
   const clist = await categoryModel.findLevel2Categories();

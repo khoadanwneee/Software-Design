@@ -1,18 +1,25 @@
 import db from '../utils/db.js';
 
+// Reusable query fragments
+const BID_COUNT_SUBQUERY = db.raw(
+  '(SELECT COUNT(*) FROM bidding_history WHERE bidding_history.product_id = products.id) AS bid_count'
+);
+
+const MASKED_BIDDER_NAME = db.raw(
+  'mask_name_alternating(users.fullname) AS bidder_name'
+);
+
+const IS_FAVORITE_CHECK = db.raw(
+  'watchlists.product_id IS NOT NULL AS is_favorite'
+);
+
 export function findAll() {
   return db('products')
     .leftJoin('users as bidder', 'products.highest_bidder_id', 'bidder.id')
     .leftJoin('users as seller', 'products.seller_id', 'seller.id')
     .select(
       'products.*', 'seller.fullname as seller_name', 'bidder.fullname as highest_bidder_name',
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history 
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `)
+      BID_COUNT_SUBQUERY
     );
 }
 
@@ -40,19 +47,11 @@ export async function findByProductIdForAdmin(productId, userId) {
       'bidder.fullname as highest_bidder_name',
       'seller.fullname as seller_name',
       'categories.name as category_name',
-      // Logic che tên người đấu giá (Giữ nguyên)
-      // Logic đếm số lượt bid (Giữ nguyên)
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history 
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `),
+      // Logic đếm số lượt bid
+      BID_COUNT_SUBQUERY,
 
-      // 4. Logic kiểm tra yêu thích (MỚI THÊM)
-      // Nếu cột product_id bên bảng watchlists có dữ liệu -> Đã like (True)
-      db.raw('watchlists.product_id IS NOT NULL AS is_favorite')
+      // Logic kiểm tra yêu thích
+      IS_FAVORITE_CHECK
     );
 
   // --- PHẦN XỬ LÝ DỮ LIỆU (QUAN TRỌNG) ---
@@ -78,14 +77,8 @@ export function findPage(limit, offset) {
     .select(
       'products.*', 
     
-      db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history 
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `)
+      MASKED_BIDDER_NAME,
+      BID_COUNT_SUBQUERY
     ).limit(limit).offset(offset);
 }
 
@@ -134,15 +127,9 @@ export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'o
     .select(
       'products.*',
       'categories.name as category_name',
-      db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
-      db.raw(`
-        ( 
-          SELECT COUNT(*)
-          FROM bidding_history
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `),
-      db.raw('watchlists.product_id IS NOT NULL AS is_favorite')
+      MASKED_BIDDER_NAME,
+      BID_COUNT_SUBQUERY,
+      IS_FAVORITE_CHECK
     );
 
   // Apply sorting
@@ -231,22 +218,9 @@ export function findByCategoryId(categoryId, limit, offset, sort, currentUserId)
     .select(
       'products.*',
       
-      // Logic che tên người đấu giá (giữ nguyên)
-      db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
-
-      // Logic đếm số lượt đấu giá (giữ nguyên)
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history 
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `),
-
-      // --- ĐOẠN MỚI THÊM VÀO ---
-      // Nếu cột product_id bên bảng watchlists có dữ liệu -> Đã like (True), ngược lại là False
-      db.raw('watchlists.product_id IS NOT NULL AS is_favorite')
-      // --------------------------
+      MASKED_BIDDER_NAME,
+      BID_COUNT_SUBQUERY,
+      IS_FAVORITE_CHECK
     )
     .modify((queryBuilder) => {
       if (sort === 'price_asc') {
@@ -289,15 +263,9 @@ export function findByCategoryIds(categoryIds, limit, offset, sort, currentUserI
     .whereNull('products.closed_at')
     .select(
       'products.*',
-      db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history 
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `),
-      db.raw('watchlists.product_id IS NOT NULL AS is_favorite')
+      MASKED_BIDDER_NAME,
+      BID_COUNT_SUBQUERY,
+      IS_FAVORITE_CHECK
     )
     .modify((queryBuilder) => {
       if (sort === 'price_asc') {
@@ -335,8 +303,8 @@ const BASE_QUERY = db('products')
   .leftJoin('users', 'products.highest_bidder_id', 'users.id')
   .select(
     'products.*',
-    db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
-    db.raw(`(SELECT COUNT(*) FROM bidding_history WHERE product_id = products.id) AS bid_count`)
+    MASKED_BIDDER_NAME,
+    BID_COUNT_SUBQUERY
   )
   .where('end_at', '>', new Date()) // Chỉ lấy sản phẩm chưa hết hạn
   .limit(5); // Top 5
@@ -359,8 +327,8 @@ export function findTopBids() {
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
     .select(
       'products.*',
-      db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
-      db.raw(`(SELECT COUNT(*) FROM bidding_history WHERE product_id = products.id) AS bid_count`)
+      MASKED_BIDDER_NAME,
+      BID_COUNT_SUBQUERY
     )
     .where('products.end_at', '>', new Date())
     .whereNull('products.closed_at')
@@ -381,14 +349,8 @@ export function findByProductId(productId) {
       'seller.fullname as seller_name',
       'seller.created_at as seller_created_at',
       'categories.name as category_name',
-      db.raw(`mask_name_alternating(highest_bidder.fullname) AS bidder_name`),
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history 
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `)
+      db.raw('mask_name_alternating(highest_bidder.fullname) AS bidder_name'),
+      BID_COUNT_SUBQUERY
     )
 }
 
@@ -430,25 +392,14 @@ export async function findByProductId2(productId, userId) {
       'seller.created_at as seller_created_at',
       'categories.name as category_name',
 
-      // Logic che tên người đấu giá (Giữ nguyên)
-      db.raw(`mask_name_alternating(users.fullname) AS bidder_name`),
+      MASKED_BIDDER_NAME,
       
       // Thông tin người đấu giá cao nhất (highest bidder)
       'users.fullname as highest_bidder_name',
       'users.email as highest_bidder_email',
       
-      // Logic đếm số lượt bid (Giữ nguyên)
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history 
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `),
-
-      // 4. Logic kiểm tra yêu thích (MỚI THÊM)
-      // Nếu cột product_id bên bảng watchlists có dữ liệu -> Đã like (True)
-      db.raw('watchlists.product_id IS NOT NULL AS is_favorite')
+      BID_COUNT_SUBQUERY,
+      IS_FAVORITE_CHECK
     );
 
   // --- PHẦN XỬ LÝ DỮ LIỆU (QUAN TRỌNG) ---
@@ -594,13 +545,7 @@ export function findAllProductsBySellerId(sellerId) {
     .where('seller_id', sellerId)
     .select(
       'products.*', 'categories.name as category_name',
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history 
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `),
+      BID_COUNT_SUBQUERY,
       db.raw(`
         CASE
           WHEN is_sold IS TRUE THEN 'Sold'
@@ -621,13 +566,7 @@ export function findActiveProductsBySellerId(sellerId) {
     .whereNull('closed_at')
     .select(
       'products.*', 'categories.name as category_name', 
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history 
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `)
+      BID_COUNT_SUBQUERY
     );
 }
 
@@ -647,13 +586,7 @@ export function findPendingProductsBySellerId(sellerId) {
       'categories.name as category_name', 
       'users.fullname as highest_bidder_name',
       'users.email as highest_bidder_email',
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `)
+      BID_COUNT_SUBQUERY
     );
 }
 
@@ -669,13 +602,7 @@ export function findSoldProductsBySellerId(sellerId) {
       'categories.name as category_name',
       'users.fullname as highest_bidder_name',
       'users.email as highest_bidder_email',
-      db.raw(`
-        (
-          SELECT COUNT(*) 
-          FROM bidding_history
-          WHERE bidding_history.product_id = products.id
-        ) AS bid_count
-      `)
+      BID_COUNT_SUBQUERY
     );
 }
 

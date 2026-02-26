@@ -35,9 +35,7 @@ export const getSignup = (req, res) => {
 };
 
 export const getSignin = (req, res) => {
-  const success_message = req.session.success_message;
-  delete req.session.success_message;
-  res.render('vwAccount/auth/signin', { success_message });
+  res.render('vwAccount/auth/signin');
 };
 
 export const getVerifyEmail = (req, res) => {

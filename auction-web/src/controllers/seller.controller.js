@@ -83,9 +83,7 @@ export const getExpiredProducts = async (req, res) => {
 };
 
 export const getAddProduct = async (req, res) => {
-    const success_message = req.session.success_message;
-    delete req.session.success_message;
-    res.render('vwSeller/add', { success_message });
+    res.render('vwSeller/add');
 };
 
 export const postAddProduct = async (req, res) => {
