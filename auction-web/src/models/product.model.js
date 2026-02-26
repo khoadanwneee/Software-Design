@@ -23,6 +23,19 @@ const IS_FAVORITE_CHECK = db.raw(
   'watchlists.product_id IS NOT NULL AS is_favorite'
 );
 
+/**
+ * DRY Fix: Điều kiện lọc sản phẩm ACTIVE xuất hiện 7+ lần trong file.
+ * Thay vì lặp .where('products.end_at', '>', new Date()).whereNull('products.closed_at')
+ * ở mỗi hàm, gọi .modify(scopeActive) cho gọn và nhất quán.
+ *
+ * Dùng với Knex .modify(): query.modify(scopeActive)
+ */
+function scopeActive(query) {
+  return query
+    .where('products.end_at', '>', new Date())
+    .whereNull('products.closed_at');
+}
+
 export function findAll() {
   return db('products')
     .leftJoin('users as bidder', 'products.highest_bidder_id', 'bidder.id')
@@ -140,8 +153,7 @@ function buildSearchQuery(keywords, logic) {
   return db('products')
     .leftJoin('categories', 'products.category_id', 'categories.id')
     .leftJoin('categories as parent_category', 'categories.parent_id', 'parent_category.id')
-    .where('products.end_at', '>', new Date())
-    .whereNull('products.closed_at')
+    .modify(scopeActive)
     .where((builder) => applyKeywordFilter(builder, words, logic));
 }
 
@@ -196,9 +208,7 @@ export function findByCategoryId(categoryId, limit, offset, sort, currentUserId)
         .andOnVal('watchlists.user_id', '=', currentUserId || -1); 
     })
     .where('products.category_id', categoryId)
-    // Chỉ hiển thị sản phẩm ACTIVE (chưa kết thúc, chưa đóng)
-    .where('products.end_at', '>', new Date())
-    .whereNull('products.closed_at')
+    .modify(scopeActive)
     .select(
       'products.*',
       
@@ -242,9 +252,7 @@ export function findByCategoryIds(categoryIds, limit, offset, sort, currentUserI
         .andOnVal('watchlists.user_id', '=', currentUserId || -1);
     })
     .whereIn('products.category_id', categoryIds)
-    // Chỉ hiển thị sản phẩm ACTIVE
-    .where('products.end_at', '>', new Date())
-    .whereNull('products.closed_at')
+    .modify(scopeActive)
     .select(
       'products.*',
       MASKED_BIDDER_NAME,
@@ -275,9 +283,7 @@ export function findByCategoryIds(categoryIds, limit, offset, sort, currentUserI
 export function countByCategoryIds(categoryIds) {
   return db('products')
     .whereIn('category_id', categoryIds)
-    // Chỉ đếm sản phẩm ACTIVE
-    .where('end_at', '>', new Date())
-    .whereNull('closed_at')
+    .modify(scopeActive)
     .count('id as count')
     .first();
 }
@@ -295,14 +301,12 @@ const BASE_QUERY = db('products')
 
 export function findTopEnding() {
   // Sắp hết hạn: Sắp xếp thời gian kết thúc TĂNG DẦN (gần nhất lên đầu)
-  return BASE_QUERY.clone().where('products.end_at', '>', new Date())
-    .whereNull('products.closed_at').orderBy('end_at', 'asc');
+  return BASE_QUERY.clone().modify(scopeActive).orderBy('end_at', 'asc');
 }
 
 export function findTopPrice() {
   // Giá cao nhất: Sắp xếp giá hiện tại GIẢM DẦN
-  return BASE_QUERY.clone().where('products.end_at', '>', new Date())
-    .whereNull('products.closed_at').orderBy('current_price', 'desc');
+  return BASE_QUERY.clone().modify(scopeActive).orderBy('current_price', 'desc');
 }
 
 export function findTopBids() {
@@ -314,8 +318,7 @@ export function findTopBids() {
       MASKED_BIDDER_NAME,
       BID_COUNT_SUBQUERY
     )
-    .where('products.end_at', '>', new Date())
-    .whereNull('products.closed_at')
+    .modify(scopeActive)
     .orderBy('bid_count', 'desc') // Order by cột alias bid_count
     .limit(5);
 }
