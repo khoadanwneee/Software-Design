@@ -108,42 +108,49 @@ export function findPage(limit, offset) {
 }
 
 // 1. Hàm tìm kiếm phân trang (Simplified FTS - Search in product name and category)
-export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'or', sort = '') {
+
+// --- Private: Áp dụng keyword filter (AND/OR) lên query builder ---
+function applyKeywordFilter(builder, words, logic) {
+  if (logic === 'and') {
+    // AND logic: tất cả keywords đều phải match
+    words.forEach(word => {
+      builder.where(function() {
+        this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
+          .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
+          .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
+      });
+    });
+  } else {
+    // OR logic: bất kỳ keyword nào match đều được
+    words.forEach(word => {
+      builder.orWhere(function() {
+        this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
+          .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
+          .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
+      });
+    });
+  }
+}
+
+// --- Private: Base query chung cho search + count ---
+function buildSearchQuery(keywords, logic) {
   const searchQuery = normalizeSearchText(keywords);
-  
-  let query = db('products')
+  const words = searchQuery.split(/\s+/).filter(w => w.length > 0);
+
+  return db('products')
     .leftJoin('categories', 'products.category_id', 'categories.id')
     .leftJoin('categories as parent_category', 'categories.parent_id', 'parent_category.id')
+    .where('products.end_at', '>', new Date())
+    .whereNull('products.closed_at')
+    .where((builder) => applyKeywordFilter(builder, words, logic));
+}
+
+export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'or', sort = '') {
+  let query = buildSearchQuery(keywords, logic)
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
     .leftJoin('watchlists', function() {
       this.on('products.id', '=', 'watchlists.product_id')
         .andOnVal('watchlists.user_id', '=', userId || -1);
-    })
-    // Chỉ hiển thị sản phẩm ACTIVE
-    .where('products.end_at', '>', new Date())
-    .whereNull('products.closed_at')
-    .where((builder) => {
-      const words = searchQuery.split(/\s+/).filter(w => w.length > 0);
-      if (logic === 'and') {
-        // AND logic: all keywords must match
-        // Split words and each word must exist in product name OR category name OR parent category name
-        words.forEach(word => {
-          builder.where(function() {
-            this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
-              .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
-              .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
-          });
-        });
-      } else {
-        // OR logic: any keyword can match in product name OR category name OR parent category name
-        words.forEach(word => {
-          builder.orWhere(function() {
-            this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
-              .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
-              .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
-          });
-        });
-      }
     })
     .select(
       'products.*',
@@ -163,45 +170,14 @@ export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'o
   } else if (sort === 'oldest') {
     query = query.orderBy('products.created_at', 'asc');
   } else {
-    // Default: sort by end_at ascending (ending soonest first)
     query = query.orderBy('products.end_at', 'asc');
   }
 
   return query.limit(limit).offset(offset);
 }
 
-// 2. Hàm đếm tổng số lượng (Simplified)
 export function countByKeywords(keywords, logic = 'or') {
-  const searchQuery = normalizeSearchText(keywords);
-  
-  return db('products')
-    .leftJoin('categories', 'products.category_id', 'categories.id')
-    .leftJoin('categories as parent_category', 'categories.parent_id', 'parent_category.id')
-    // Chỉ đếm sản phẩm ACTIVE
-    .where('products.end_at', '>', new Date())
-    .whereNull('products.closed_at')
-    .where((builder) => {
-      const words = searchQuery.split(/\s+/).filter(w => w.length > 0);
-      if (logic === 'and') {
-        // AND logic: all keywords must match
-        words.forEach(word => {
-          builder.where(function() {
-            this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
-              .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
-              .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
-          });
-        });
-      } else {
-        // OR logic: any keyword can match in product name OR category name OR parent category name
-        words.forEach(word => {
-          builder.orWhere(function() {
-            this.whereRaw(`LOWER(remove_accents(products.name)) LIKE ?`, [`%${word}%`])
-              .orWhereRaw(`LOWER(remove_accents(categories.name)) LIKE ?`, [`%${word}%`])
-              .orWhereRaw(`LOWER(remove_accents(parent_category.name)) LIKE ?`, [`%${word}%`]);
-          });
-        });
-      }
-    })
+  return buildSearchQuery(keywords, logic)
     .count('products.id as count')
     .first();
 }
@@ -215,19 +191,10 @@ export function findByCategoryId(categoryId, limit, offset, sort, currentUserId)
   return db('products')
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
     
-    // --- ĐOẠN MỚI THÊM VÀO ---
-    // Join bảng watchlists với điều kiện product_id khớp VÀ user_id phải là người đang xem
     .leftJoin('watchlists', function() {
       this.on('products.id', '=', 'watchlists.product_id')
         .andOnVal('watchlists.user_id', '=', currentUserId || -1); 
-        // Nếu currentUserId là null/undefined (khách vãng lai), dùng -1 để không khớp với ai cả
     })
-    // --------------------------
-    // đang active
-    // chọn buy now hoặc người đặt giá đặt giá cao hơn giá buy now -> closed_at bằng thời điểm buy, chuyển trạn thái sản phẩm qua pending
-    // pending tức là đang chờ thanh toán
-    // từ pending(is_sold = null) mà thanh toán thành công -> closed_at được cập nhật theo thời điểm thanh toán thành công, is_sold = true
-
     .where('products.category_id', categoryId)
     // Chỉ hiển thị sản phẩm ACTIVE (chưa kết thúc, chưa đóng)
     .where('products.end_at', '>', new Date())
