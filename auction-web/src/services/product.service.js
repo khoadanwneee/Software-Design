@@ -1,7 +1,7 @@
 import * as productModel from '../models/product.model.js';
 import { getPagination, buildPaginationInfo } from '../utils/pagination.js';
 import * as systemSettingModel from '../models/systemSetting.model.js';
-import * as descriptionService from './productdescription.service.js';
+import * as descriptionService from './productDescription.service.js';
 import * as biddingService from './bidding.service.js';
 import * as commentService from './comment.service.js';
 import * as ratingService from './rating.service.js';
@@ -205,8 +205,6 @@ export async function getSearchProducts({
     totalPages
   };
 }
-
-
 const rules = [
   {
     match: (p) => p.is_sold === true,
@@ -223,6 +221,21 @@ const rules = [
       return (endDate <= now || p.closed_at) && p.highest_bidder_id;
     },
     status: 'PENDING'
+  },
+    {
+    match: (p) => {      const now = new Date();
+      const endDate = new Date(p.end_at);
+      return endDate <= now && !p.highest_bidder_id;
+    },
+    status: 'EXPIRED'
+  },
+  {
+    match: (p) => {
+      const now = new Date();
+      const endDate = new Date(p.end_at);
+      return endDate > now && !p.closed_at;
+    },
+    status: 'ACTIVE'
   }
 ];
 

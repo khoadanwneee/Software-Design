@@ -1,9 +1,8 @@
 import * as biddingHistoryModel from '../models/biddingHistory.model.js';
 import * as reviewModel from '../models/review.model.js';
 import * as systemSettingModel from '../models/systemSetting.model.js';
-import * as userModel from '../models/user.model.js';
-import { sendMail } from '../utils/mailer.js';
 import db from '../utils/db.js';
+import { sendBidNotificationEmails, sendRejectBidderEmail } from '../utils/bidNotification.js';
 
 /**
  * ============================================
@@ -20,16 +19,39 @@ export async function getBiddingHistory(productId) {
   return biddingHistoryModel.getBiddingHistory(productId);
 }
 
-// ============ HELPERS ============
+// ============ VALIDATION HELPERS ============
 
 /**
- * Kiểm tra user có đủ điều kiện bid không (rating, rejected, etc.)
+ * Kiểm tra product tồn tại
  */
-async function validateBidderEligibility(trx, productId, userId, product) {
+async function validateProductExists(trx, productId) {
+  const product = await trx('products').where('id', productId).first();
+  if (!product) throw new Error('Product not found');
+  return product;
+}
+
+/**
+ * Kiểm tra product chưa bán
+ */
+function validateProductNotSold(product) {
+  if (product.is_sold === true) {
+    throw new Error('This product has already been sold');
+  }
+}
+
+/**
+ * Kiểm tra user không phải seller
+ */
+function validateBidderNotSeller(product, userId) {
   if (product.seller_id === userId) {
     throw new Error('You cannot bid on your own product');
   }
+}
 
+/**
+ * Kiểm tra user không bị reject
+ */
+async function validateBidderNotRejected(trx, productId, userId) {
   const isRejected = await trx('rejected_bidders')
     .where('product_id', productId)
     .where('bidder_id', userId)
@@ -38,7 +60,12 @@ async function validateBidderEligibility(trx, productId, userId, product) {
   if (isRejected) {
     throw new Error('You have been rejected from bidding on this product by the seller');
   }
+}
 
+/**
+ * Kiểm tra rating của bidder
+ */
+async function validateBidderRating(product, userId) {
   const ratingPoint = await reviewModel.calculateRatingPoint(userId);
   const userReviews = await reviewModel.getReviewsByUserId(userId);
   const hasReviews = userReviews.length > 0;
@@ -53,6 +80,47 @@ async function validateBidderEligibility(trx, productId, userId, product) {
     throw new Error('Your rating point is not greater than 80%. You cannot place bids.');
   }
 }
+
+/**
+ * Kiểm tra auction chưa kết thúc
+ */
+function validateAuctionActive(product) {
+  const now = new Date();
+  const endDate = new Date(product.end_at);
+  if (now > endDate) throw new Error('Auction has ended');
+}
+
+/**
+ * Kiểm tra bid amount (giá phải cao hơn current price + step price)
+ */
+function validateBidAmount(product, bidAmount) {
+  const currentPrice = parseFloat(product.current_price || product.starting_price);
+  const minIncrement = parseFloat(product.step_price);
+
+  if (bidAmount <= currentPrice) {
+    throw new Error(`Bid must be higher than current price (${currentPrice.toLocaleString()} VND)`);
+  }
+
+  if (bidAmount < currentPrice + minIncrement) {
+    throw new Error(
+      `Bid must be at least ${minIncrement.toLocaleString()} VND higher than current price`
+    );
+  }
+}
+
+/**
+ * Nhóm tất cả validations
+ */
+async function validateBidRequest(trx, productId, userId, bidAmount, product) {
+  validateProductNotSold(product);
+  validateBidderNotSeller(product, userId);
+  await validateBidderNotRejected(trx, productId, userId);
+  await validateBidderRating(product, userId);
+  validateAuctionActive(product);
+  validateBidAmount(product, bidAmount);
+}
+
+// ============ DATA PREPARATION HELPERS ============
 
 /**
  * Kiểm tra auto-extend và tính thời gian mới nếu cần
@@ -136,265 +204,139 @@ function calculateNewPrice(product, bidAmount, userId) {
 }
 
 /**
- * Gửi email thông báo bid cho seller, bidder hiện tại, và bidder cũ
+ * Chuẩn bị bid context (gather all data needed)
  */
-function sendBidNotificationEmails(result, productUrl) {
-  (async () => {
-    try {
-      const [seller, currentBidder, previousBidder] = await Promise.all([
-        userModel.findById(result.sellerId),
-        userModel.findById(result.userId),
-        result.previousHighestBidderId && result.previousHighestBidderId !== result.userId
-          ? userModel.findById(result.previousHighestBidderId)
-          : null,
-      ]);
+async function prepareBidContext(trx, productId, product, userId, bidAmount) {
+  const previousHighestBidderId = product.highest_bidder_id;
+  const previousPrice = parseFloat(product.current_price || product.starting_price);
 
-      const emailPromises = [];
+  const extendedEndTime = await checkAutoExtend(product);
+  if (extendedEndTime) product.end_at = extendedEndTime;
 
-      if (seller?.email) {
-        emailPromises.push(
-          sendMail({
-            to: seller.email,
-            subject: `💰 New bid on your product: ${result.productName}`,
-            html: buildSellerBidEmailHtml(seller, result, productUrl),
-          })
-        );
-      }
+  const priceResult = calculateNewPrice(product, bidAmount, userId);
 
-      if (currentBidder?.email) {
-        const isWinning = result.newHighestBidderId === result.userId;
-        emailPromises.push(
-          sendMail({
-            to: currentBidder.email,
-            subject: isWinning
-              ? `✅ You're winning: ${result.productName}`
-              : `📊 Bid placed: ${result.productName}`,
-            html: buildBidderBidEmailHtml(currentBidder, result, productUrl, isWinning),
-          })
-        );
-      }
-
-      if (previousBidder?.email && result.priceChanged) {
-        const wasOutbid = result.newHighestBidderId !== result.previousHighestBidderId;
-        emailPromises.push(
-          sendMail({
-            to: previousBidder.email,
-            subject: wasOutbid
-              ? `⚠️ You've been outbid: ${result.productName}`
-              : `📊 Price updated: ${result.productName}`,
-            html: buildPreviousBidderEmailHtml(previousBidder, result, productUrl, wasOutbid),
-          })
-        );
-      }
-
-      if (emailPromises.length > 0) {
-        await Promise.all(emailPromises);
-        console.log(`${emailPromises.length} bid notification email(s) sent for product #${result.productId}`);
-      }
-    } catch (emailError) {
-      console.error('Failed to send bid notification emails:', emailError);
-    }
-  })();
+  return {
+    product,
+    productId,
+    userId,
+    bidAmount,
+    previousHighestBidderId,
+    previousPrice,
+    extendedEndTime,
+    priceResult,
+  };
 }
 
-// ============ EMAIL TEMPLATES ============
+// ============ DATABASE UPDATE HELPERS ============
 
-function formatVND(amount) {
-  return new Intl.NumberFormat('en-US').format(amount);
+/**
+ * Cập nhật giá sản phẩm
+ */
+async function updateProductPrice(trx, context) {
+  const updateData = {
+    current_price: context.priceResult.newCurrentPrice,
+    highest_bidder_id: context.priceResult.newHighestBidderId,
+    highest_max_price: context.priceResult.newHighestMaxPrice,
+  };
+
+  if (context.priceResult.buyNowTriggered) {
+    updateData.end_at = new Date();
+    updateData.closed_at = new Date();
+  } else if (context.extendedEndTime) {
+    updateData.end_at = context.extendedEndTime;
+  }
+
+  await trx('products').where('id', context.productId).update(updateData);
 }
 
-function buildSellerBidEmailHtml(seller, result, productUrl) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0;">New Bid Received!</h1>
-      </div>
-      <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <p>Dear <strong>${seller.fullname}</strong>,</p>
-        <p>Great news! Your product has received a new bid:</p>
-        <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #72AEC8;">
-          <h3 style="margin: 0 0 15px 0; color: #333;">${result.productName}</h3>
-          <p style="margin: 5px 0;"><strong>Current Price:</strong></p>
-          <p style="font-size: 28px; color: #72AEC8; margin: 5px 0; font-weight: bold;">${formatVND(result.newCurrentPrice)} VND</p>
-          ${result.previousPrice !== result.newCurrentPrice ? `<p style="margin: 5px 0; color: #666; font-size: 14px;"><i>Previous: ${formatVND(result.previousPrice)} VND</i></p>` : ''}
-        </div>
-        ${result.productSold ? `<div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 15px 0;"><p style="margin: 0; color: #155724;"><strong>🎉 Buy Now price reached!</strong> Auction has ended.</p></div>` : ''}
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${productUrl}" style="display: inline-block; background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Product</a>
-        </div>
-      </div>
-      <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">This is an automated message from Online Auction.</p>
-    </div>`;
+/**
+ * Tạo bidding history nếu cần
+ */
+async function createBiddingHistory(trx, context) {
+  if (context.priceResult.shouldCreateHistory) {
+    await trx('bidding_history').insert({
+      product_id: context.productId,
+      bidder_id: context.priceResult.newHighestBidderId,
+      current_price: context.priceResult.newCurrentPrice,
+    });
+  }
 }
 
-function buildBidderBidEmailHtml(bidder, result, productUrl, isWinning) {
-  const color = isWinning ? '#28a745' : '#ffc107';
-  const colorDark = isWinning ? '#218838' : '#e0a800';
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, ${color} 0%, ${colorDark} 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0;">${isWinning ? "You're Winning!" : 'Bid Placed'}</h1>
-      </div>
-      <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <p>Dear <strong>${bidder.fullname}</strong>,</p>
-        <p>${isWinning ? 'Congratulations! Your bid has been placed and you are currently the highest bidder!' : 'Your bid has been placed. However, another bidder has a higher maximum bid.'}</p>
-        <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid ${color};">
-          <h3 style="margin: 0 0 15px 0; color: #333;">${result.productName}</h3>
-          <p style="margin: 5px 0;"><strong>Your Max Bid:</strong> ${formatVND(result.bidAmount)} VND</p>
-          <p style="margin: 5px 0;"><strong>Current Price:</strong></p>
-          <p style="font-size: 28px; color: ${color}; margin: 5px 0; font-weight: bold;">${formatVND(result.newCurrentPrice)} VND</p>
-        </div>
-        ${result.productSold && isWinning ? `<div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 15px 0;"><p style="margin: 0; color: #155724;"><strong>🎉 Congratulations! You won this product!</strong></p><p style="margin: 10px 0 0 0; color: #155724;">Please proceed to complete your payment.</p></div>` : ''}
-        ${!isWinning ? `<div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;"><p style="margin: 0; color: #856404;"><strong>💡 Tip:</strong> Consider increasing your maximum bid to improve your chances of winning.</p></div>` : ''}
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${productUrl}" style="display: inline-block; background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">${result.productSold && isWinning ? 'Complete Payment' : 'View Auction'}</a>
-        </div>
-      </div>
-      <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">This is an automated message from Online Auction.</p>
-    </div>`;
+/**
+ * Upsert auto bidding
+ */
+async function upsertAutoBidding(trx, context) {
+  await trx.raw(
+    `INSERT INTO auto_bidding (product_id, bidder_id, max_price)
+     VALUES (?, ?, ?)
+     ON CONFLICT (product_id, bidder_id)
+     DO UPDATE SET max_price = EXCLUDED.max_price, created_at = NOW()`,
+    [context.productId, context.userId, context.bidAmount]
+  );
 }
 
-function buildPreviousBidderEmailHtml(prevBidder, result, productUrl, wasOutbid) {
-  const color = wasOutbid ? '#dc3545' : '#ffc107';
-  const colorDark = wasOutbid ? '#c82333' : '#e0a800';
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, ${color} 0%, ${colorDark} 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0;">${wasOutbid ? "You've Been Outbid!" : 'Price Updated'}</h1>
-      </div>
-      <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <p>Dear <strong>${prevBidder.fullname}</strong>,</p>
-        ${wasOutbid ? `<p>Unfortunately, another bidder has placed a higher bid on the product you were winning:</p>` : `<p>Good news! You're still the highest bidder, but the current price has been updated due to a new bid:</p>`}
-        <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid ${color};">
-          <h3 style="margin: 0 0 15px 0; color: #333;">${result.productName}</h3>
-          ${!wasOutbid ? `<p style="margin: 5px 0; color: #28a745;"><strong>✓ You're still winning!</strong></p>` : ''}
-          <p style="margin: 5px 0;"><strong>New Current Price:</strong></p>
-          <p style="font-size: 28px; color: ${color}; margin: 5px 0; font-weight: bold;">${formatVND(result.newCurrentPrice)} VND</p>
-          <p style="margin: 10px 0 0 0; color: #666; font-size: 14px;"><i>Previous price: ${formatVND(result.previousPrice)} VND</i></p>
-        </div>
-        ${wasOutbid ? `<div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;"><p style="margin: 0; color: #856404;"><strong>💡 Don't miss out!</strong> Place a new bid to regain the lead.</p></div>` : `<div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 15px 0;"><p style="margin: 0; color: #155724;"><strong>💡 Tip:</strong> Your automatic bidding is working! Consider increasing your max bid if you want more protection.</p></div>`}
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${productUrl}" style="display: inline-block; background: linear-gradient(135deg, ${wasOutbid ? '#28a745' : '#72AEC8'} 0%, ${wasOutbid ? '#218838' : '#5a9ab8'} 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">${wasOutbid ? 'Place New Bid' : 'View Auction'}</a>
-        </div>
-      </div>
-      <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">This is an automated message from Online Auction.</p>
-    </div>`;
-}
-
-function buildRejectBidderEmailHtml(rejectedUser, product, sellerName, homeUrl) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0;">Bid Rejected</h1>
-      </div>
-      <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
-        <p>Dear <strong>${rejectedUser.fullname}</strong>,</p>
-        <p>We regret to inform you that the seller has rejected your bid on the following product:</p>
-        <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #dc3545;">
-          <h3 style="margin: 0 0 10px 0; color: #333;">${product.name}</h3>
-          <p style="margin: 5px 0; color: #666;"><strong>Seller:</strong> ${sellerName}</p>
-        </div>
-        <p style="color: #666;">This means you can no longer place bids on this specific product. Your previous bids on this product have been removed.</p>
-        <p style="color: #666;">You can still participate in other auctions on our platform.</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${homeUrl}" style="display: inline-block; background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Browse Other Auctions</a>
-        </div>
-        <p style="color: #888; font-size: 13px;">If you believe this was done in error, please contact our support team.</p>
-      </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="color: #888; font-size: 12px; text-align: center;">This is an automated message from Online Auction. Please do not reply to this email.</p>
-    </div>`;
+/**
+ * Thực hiện tất cả database updates
+ */
+async function executeBid(trx, context) {
+  await updateProductPrice(trx, context);
+  await createBiddingHistory(trx, context);
+  await upsertAutoBidding(trx, context);
 }
 
 // ============ MAIN FUNCTIONS ============
 
 /**
- * Đặt bid (core business logic)
+ * Đặt bid (core business logic - orchestrator)
  * @returns {object} Kết quả bid bao gồm giá mới, winner, trạng thái sold, etc.
  */
-export async function placeBid(productId, userId, bidAmount) {
+export async function placeBid(productId, userId, bidAmount, productUrl) {
   const result = await db.transaction(async (trx) => {
-    const product = await trx('products')
-      .where('id', productId)
-      .forUpdate()
-      .first();
+    // 1. Kiểm tra product tồn tại
+    const product = await validateProductExists(trx, productId);
+    
+    // 2. Validate tất cả điều kiện
+    await validateBidRequest(trx, productId, userId, bidAmount, product);
 
-    if (!product) throw new Error('Product not found');
-    if (product.is_sold === true) throw new Error('This product has already been sold');
+    // 3. Chuẩn bị dữ liệu cần thiết
+    const context = await prepareBidContext(trx, productId, product, userId, bidAmount);
 
-    await validateBidderEligibility(trx, productId, userId, product);
+    // 4. Thực hiện cập nhật database
+    await executeBid(trx, context);
 
-    const now = new Date();
-    const endDate = new Date(product.end_at);
-    if (now > endDate) throw new Error('Auction has ended');
-
-    const currentPrice = parseFloat(product.current_price || product.starting_price);
-    if (bidAmount <= currentPrice) {
-      throw new Error(`Bid must be higher than current price (${currentPrice.toLocaleString()} VND)`);
-    }
-
-    const minIncrement = parseFloat(product.step_price);
-    if (bidAmount < currentPrice + minIncrement) {
-      throw new Error(`Bid must be at least ${minIncrement.toLocaleString()} VND higher than current price`);
-    }
-
-    const previousHighestBidderId = product.highest_bidder_id;
-    const previousPrice = parseFloat(product.current_price || product.starting_price);
-
-    const extendedEndTime = await checkAutoExtend(product);
-    if (extendedEndTime) product.end_at = extendedEndTime;
-
-    const priceResult = calculateNewPrice(product, bidAmount, userId);
-
-    const updateData = {
-      current_price: priceResult.newCurrentPrice,
-      highest_bidder_id: priceResult.newHighestBidderId,
-      highest_max_price: priceResult.newHighestMaxPrice,
-    };
-
-    if (priceResult.buyNowTriggered) {
-      updateData.end_at = new Date();
-      updateData.closed_at = new Date();
-    } else if (extendedEndTime) {
-      updateData.end_at = extendedEndTime;
-    }
-
-    await trx('products').where('id', productId).update(updateData);
-
-    if (priceResult.shouldCreateHistory) {
-      await trx('bidding_history').insert({
-        product_id: productId,
-        bidder_id: priceResult.newHighestBidderId,
-        current_price: priceResult.newCurrentPrice,
-      });
-    }
-
-    await trx.raw(
-      `INSERT INTO auto_bidding (product_id, bidder_id, max_price)
-       VALUES (?, ?, ?)
-       ON CONFLICT (product_id, bidder_id)
-       DO UPDATE SET max_price = EXCLUDED.max_price, created_at = NOW()`,
-      [productId, userId, bidAmount]
-    );
-
-    return {
-      productId,
-      newCurrentPrice: priceResult.newCurrentPrice,
-      newHighestBidderId: priceResult.newHighestBidderId,
-      userId,
-      bidAmount,
-      productSold: priceResult.buyNowTriggered,
-      autoExtended: !!extendedEndTime,
-      newEndTime: extendedEndTime,
-      productName: product.name,
-      sellerId: product.seller_id,
-      previousHighestBidderId,
-      previousPrice,
-      priceChanged: previousPrice !== priceResult.newCurrentPrice,
-    };
+    // 5. Trả kết quả
+    return buildBidResult(context);
   });
 
+  // Fire-and-forget: trigger bid notification emails after transaction commits
+  try {
+    if (productUrl) sendBidNotificationEmails(result, productUrl);
+  } catch (notifErr) {
+    console.error('Failed to trigger bid notifications:', notifErr);
+  }
+
   return result;
+}
+
+/**
+ * Dựng result object từ bid context
+ */
+function buildBidResult(context) {
+  return {
+    productId: context.productId,
+    newCurrentPrice: context.priceResult.newCurrentPrice,
+    newHighestBidderId: context.priceResult.newHighestBidderId,
+    userId: context.userId,
+    bidAmount: context.bidAmount,
+    productSold: context.priceResult.buyNowTriggered,
+    autoExtended: !!context.extendedEndTime,
+    newEndTime: context.extendedEndTime,
+    productName: context.product.name,
+    sellerId: context.product.seller_id,
+    previousHighestBidderId: context.previousHighestBidderId,
+    previousPrice: context.previousPrice,
+    priceChanged: context.previousPrice !== context.priceResult.newCurrentPrice,
+  };
 }
 
 /**
@@ -527,23 +469,32 @@ export async function rejectBidder(productId, bidderId, sellerId) {
 }
 
 /**
- * Gửi email thông báo reject bidder (fire-and-forget)
+ * Unreject bidder (seller action) - remove from rejected list
  */
-export function sendRejectBidderEmail(rejectedUser, product, sellerName, homeUrl) {
-  if (!rejectedUser?.email || !product) return;
+export async function unrejectBidder(productId, bidderId, sellerId) {
+  await db.transaction(async (trx) => {
+    const product = await trx('products')
+      .where('id', productId)
+      .forUpdate()
+      .first();
 
-  sendMail({
-    to: rejectedUser.email,
-    subject: `Your bid has been rejected: ${product.name}`,
-    html: buildRejectBidderEmailHtml(rejectedUser, product, sellerName, homeUrl),
-  })
-    .then(() => console.log(`Rejection email sent to ${rejectedUser.email} for product #${product.id}`))
-    .catch((err) => console.error('Failed to send rejection email:', err));
+    if (!product) throw new Error('Product not found');
+    if (product.seller_id !== sellerId) throw new Error('Only the seller can unreject bidders');
+
+    const now = new Date();
+    const endDate = new Date(product.end_at);
+    if (product.is_sold !== null || endDate <= now || product.closed_at) {
+      throw new Error('Can only unreject bidders for active auctions');
+    }
+
+    await trx('rejected_bidders')
+      .where({ product_id: productId, bidder_id: bidderId })
+      .del();
+  });
+
+  return { success: true };
 }
 
-/**
- * Buy Now (mua ngay)
- */
 export async function buyNow(productId, userId) {
   await db.transaction(async (trx) => {
     const product = await trx('products')
@@ -591,5 +542,3 @@ export async function buyNow(productId, userId) {
     });
   });
 }
-
-export { sendBidNotificationEmails };
