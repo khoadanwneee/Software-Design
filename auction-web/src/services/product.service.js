@@ -119,9 +119,9 @@ export async function prepareProductList(products) {
 
 
 
-export async function getProductByCategory({categoryIds, category, query, sort, userId}) 
+export async function getProductByCategory({categoryIds, category, currentPage, sort, userId}) 
 {
-  const { page, limit, offset } = getPagination(query, 3);
+  const { page, limit, offset } = getPagination(currentPage, 3);
   
 
   const list = await productModel.findByCategoryIds(
@@ -155,7 +155,7 @@ export async function getProductByCategory({categoryIds, category, query, sort, 
 
 export async function getSearchProducts({
   q,
-  query,
+  currentPage,
   userId,
   logic = 'and',
   sort = ''
@@ -173,7 +173,7 @@ export async function getSearchProducts({
   }
 
   
-  const { page, limit, offset } = getPagination(query, 3);
+  const { page, limit, offset } = getPagination(currentPage, 3);
 
   const keywords = q.trim();
 

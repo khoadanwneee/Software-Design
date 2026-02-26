@@ -1,5 +1,5 @@
-export function getPagination(query, defaultLimit = 3) {
-  const page = parseInt(query.page) || 1;
+export function getPagination(defaultPage = 1, defaultLimit = 3) {
+  const page = parseInt(defaultPage) || 1;
   const limit = defaultLimit;
   const offset = (page - 1) * limit;
 
@@ -20,3 +20,6 @@ export function buildPaginationInfo(page, limit, totalCount) {
 
   return { totalPages, from, to };
 }
+
+
+

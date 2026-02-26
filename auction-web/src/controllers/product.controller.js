@@ -37,7 +37,7 @@ export const getCategory = async (req, res) => {
   const data = await productService.getProductByCategory({
     categoryIds: categoryData.categoryIds,
     category: categoryData.category,
-    query: req.query,
+    currentPage: (req.query.page || 1),
     sort,
     userId
   });
@@ -54,7 +54,7 @@ export const getSearch = async (req, res) => {
 
   const result = await productService.getSearchProducts({
     q,
-    query: req.query,  
+    currentPage: (req.query.page || 1),
     userId,
     logic,
     sort
