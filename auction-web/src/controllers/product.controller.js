@@ -149,11 +149,6 @@ export const getDetail = async (req, res) => {
   
   const totalPages = Math.ceil(totalComments / commentsPerPage);
   
-  const success_message = req.session.success_message;
-  const error_message = req.session.error_message;
-  delete req.session.success_message;
-  delete req.session.error_message;
-
   const sellerRatingObject = await reviewModel.calculateRatingPoint(product.seller_id);
   const sellerReviews = await reviewModel.getReviewsByUserId(product.seller_id);
   
@@ -178,8 +173,6 @@ export const getDetail = async (req, res) => {
     biddingHistory,
     rejectedBidders,
     comments,
-    success_message,
-    error_message,
     related_products,
     seller_rating_point: sellerRatingObject.rating_point,
     seller_has_reviews: sellerReviews.length > 0,

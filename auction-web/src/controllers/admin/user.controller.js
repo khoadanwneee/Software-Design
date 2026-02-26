@@ -5,17 +5,10 @@ import { sendMail } from '../../utils/mailer.js';
 
 export const getList = async (req, res) => {
     const users = await userModel.loadAllUsers();
-    const success_message = req.session.success_message;
-    const error_message = req.session.error_message;
-    
-    delete req.session.success_message;
-    delete req.session.error_message;
     
     res.render('vwAdmin/users/list', { 
         users,
-        empty: users.length === 0,
-        success_message,
-        error_message
+        empty: users.length === 0
     });
 };
 
@@ -58,11 +51,7 @@ export const postAdd = async (req, res) => {
 export const getEdit = async (req, res) => {
     const id = req.params.id;
     const user = await userModel.findById(id);
-    const error_message = req.session.error_message;
-    
-    delete req.session.error_message;
-    
-    res.render('vwAdmin/users/edit', { user, error_message });
+    res.render('vwAdmin/users/edit', { user });
 };
 
 export const postEdit = async (req, res) => {
