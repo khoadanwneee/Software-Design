@@ -12,16 +12,16 @@
         </a>
       </li>
       <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Home</a></li>
-      <li class="breadcrumb-item active" aria-current="page">Seller Ratings</li>
+      <li class="breadcrumb-item active" aria-current="page">{{userRole}} Ratings</li>
     </ol>
   </nav>
 
   <!-- Header -->
   <div class="rating-header mb-4">
     <h1 class="h3 fw-bold mb-2">
-      <i class="bi bi-star-fill me-3"></i>{{sellerName}}'s Ratings
+      <i class="bi bi-star-fill me-3"></i>{{userName}}'s Ratings
     </h1>
-    <p class="mb-0 opacity-75">View rating score and detailed reviews from buyers</p>
+    <p class="mb-0 opacity-75">View rating score and detailed reviews from {{reviewerRole}}</p>
   </div>
 
   <!-- Rating Overview -->
@@ -31,7 +31,7 @@
       <div class="rating-card p-4 text-center h-100">
         <h5 class="text-muted mb-3">Overall Rating Score</h5>
         <div class="rating-score mb-3">
-          {{#if rating_point}}
+          {{#if totalReviews}}
             {{#if (eq rating_point 1)}}
               100.00%
             {{else}}
@@ -150,7 +150,7 @@
         <div class="text-center py-5">
           <i class="bi bi-inbox empty-icon"></i>
           <h5 class="text-muted mt-3">No reviews yet</h5>
-          <p class="text-muted small">This seller hasn't received any reviews from buyers.</p>
+          <p class="text-muted small">This {{lowerUserRole}} hasn't received any reviews from {{reviewerRole}}.</p>
         </div>
       {{/if}}
     </div>

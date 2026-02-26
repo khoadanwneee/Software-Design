@@ -33,52 +33,67 @@ export function findAll() {
     );
 }
 
-export async function findByProductIdForAdmin(productId, userId) {
-  // Chuyển sang async để xử lý dữ liệu trước khi trả về controller
+/**
+ * Unified product finder by ID.
+ * @param {number} productId - Product ID
+ * @param {number|null} userId - Current user ID (for watchlist check), null if not logged in
+ * @param {Object} [options] - Query options
+ * @param {boolean} [options.maskBidderName=true] - Whether to mask bidder name for privacy
+ * @param {boolean} [options.includeEmails=true] - Whether to include seller/bidder emails
+ * @param {boolean} [options.includeSellerCreatedAt=true] - Whether to include seller join date
+ */
+export async function findByProductId(productId, userId, { maskBidderName = true, includeEmails = true, includeSellerCreatedAt = true } = {}) {
+  const selectColumns = [
+    'products.*',
+    'product_images.img_link',
+    'seller.fullname as seller_name',
+    'categories.name as category_name',
+    BID_COUNT_SUBQUERY,
+    IS_FAVORITE_CHECK,
+  ];
+
+  // Bidder name: masked for public, raw for admin
+  if (maskBidderName) {
+    selectColumns.push(db.raw('mask_name_alternating(bidder.fullname) AS bidder_name'));
+  }
+  selectColumns.push('bidder.fullname as highest_bidder_name');
+
+  // Optionally include emails (needed for notifications)
+  if (includeEmails) {
+    selectColumns.push('seller.email as seller_email');
+    selectColumns.push('bidder.email as highest_bidder_email');
+  }
+
+  // Optionally include seller join date
+  if (includeSellerCreatedAt) {
+    selectColumns.push('seller.created_at as seller_created_at');
+  }
+
   const rows = await db('products')
-    // 1. Join lấy thông tin người đấu giá cao nhất (Giữ nguyên)
     .leftJoin('users as bidder', 'products.highest_bidder_id', 'bidder.id')
     .leftJoin('users as seller', 'products.seller_id', 'seller.id')
-    // 2. Join lấy danh sách ảnh phụ (Giữ nguyên)
     .leftJoin('product_images', 'products.id', 'product_images.product_id')
     .leftJoin('categories', 'products.category_id', 'categories.id')
-    // 3. Join lấy thông tin Watchlist (MỚI THÊM)
-    // Logic: Join vào bảng watchlist xem user hiện tại có lưu product này không
     .leftJoin('watchlists', function() {
-        this.on('products.id', '=', 'watchlists.product_id')
-            .andOnVal('watchlists.user_id', '=', userId || -1); 
-            // Nếu userId null (chưa login) thì so sánh với -1 để không khớp
+      this.on('products.id', '=', 'watchlists.product_id')
+        .andOnVal('watchlists.user_id', '=', userId || -1);
     })
-
     .where('products.id', productId)
-    .select(
-      'products.*',
-      'product_images.img_link', // Lấy link ảnh phụ để lát nữa gộp mảng
-      'bidder.fullname as highest_bidder_name',
-      'seller.fullname as seller_name',
-      'categories.name as category_name',
-      // Logic đếm số lượt bid
-      BID_COUNT_SUBQUERY,
+    .select(selectColumns);
 
-      // Logic kiểm tra yêu thích
-      IS_FAVORITE_CHECK
-    );
-
-  // --- PHẦN XỬ LÝ DỮ LIỆU (QUAN TRỌNG) ---
-  
-  // Nếu không tìm thấy sản phẩm nào
   if (rows.length === 0) return null;
 
-  // SQL trả về nhiều dòng (do 1 sp có nhiều ảnh), ta lấy dòng đầu tiên làm thông tin chính
   const product = rows[0];
-
-  // Gom tất cả img_link của các dòng lại thành mảng sub_images
-  // Để phục vụ vòng lặp {{#each product.sub_images}} bên View
   product.sub_images = rows
     .map(row => row.img_link)
-    .filter(link => link && link !== product.thumbnail); // Lọc bỏ ảnh null hoặc trùng thumbnail
+    .filter(link => link && link !== product.thumbnail);
 
   return product;
+}
+
+// Backward-compatible alias (admin pages: no masking, no emails)
+export async function findByProductIdForAdmin(productId, userId) {
+  return findByProductId(productId, userId, { maskBidderName: false, includeEmails: false, includeSellerCreatedAt: false });
 }
 
 export function findPage(limit, offset) {
@@ -338,24 +353,6 @@ export function findTopBids() {
     .limit(5);
 }
 
-export function findByProductId(productId) {
-  return db('products')
-    .leftJoin('users as highest_bidder', 'products.highest_bidder_id', 'highest_bidder.id')
-    .leftJoin('product_images', 'products.id', 'product_images.product_id')
-    .leftJoin('users as seller', 'products.seller_id', 'seller.id')
-    .leftJoin('categories', 'products.category_id', 'categories.id')
-    .where('products.id', productId)
-    .select(
-      'products.*',
-      'product_images.img_link',
-      'seller.fullname as seller_name',
-      'seller.created_at as seller_created_at',
-      'categories.name as category_name',
-      db.raw('mask_name_alternating(highest_bidder.fullname) AS bidder_name'),
-      BID_COUNT_SUBQUERY
-    )
-}
-
 export function findRelatedProducts(productId) {
     return db('products')
       .leftJoin('products as p2', 'products.category_id', 'p2.category_id')
@@ -365,60 +362,9 @@ export function findRelatedProducts(productId) {
       .limit(5);
   } 
 
+// Backward-compatible alias for existing callers
 export async function findByProductId2(productId, userId) {
-  // Chuyển sang async để xử lý dữ liệu trước khi trả về controller
-  const rows = await db('products')
-    // 1. Join lấy thông tin người đấu giá cao nhất (Giữ nguyên)
-    .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    
-    // 2. Join lấy danh sách ảnh phụ (Giữ nguyên)
-    .leftJoin('product_images', 'products.id', 'product_images.product_id')
-
-    // 3. Join lấy thông tin Watchlist (MỚI THÊM)
-    // Logic: Join vào bảng watchlist xem user hiện tại có lưu product này không
-    .leftJoin('watchlists', function() {
-        this.on('products.id', '=', 'watchlists.product_id')
-            .andOnVal('watchlists.user_id', '=', userId || -1); 
-            // Nếu userId null (chưa login) thì so sánh với -1 để không khớp
-    })
-    .leftJoin('users as seller', 'products.seller_id', 'seller.id')
-
-    .leftJoin('categories', 'products.category_id', 'categories.id')
-
-    .where('products.id', productId)
-    .select(
-      'products.*',
-      'product_images.img_link', // Lấy link ảnh phụ để lát nữa gộp mảng
-      'seller.fullname as seller_name',
-      'seller.email as seller_email',
-      'seller.created_at as seller_created_at',
-      'categories.name as category_name',
-
-      MASKED_BIDDER_NAME,
-      
-      // Thông tin người đấu giá cao nhất (highest bidder)
-      'users.fullname as highest_bidder_name',
-      'users.email as highest_bidder_email',
-      
-      BID_COUNT_SUBQUERY,
-      IS_FAVORITE_CHECK
-    );
-
-  // --- PHẦN XỬ LÝ DỮ LIỆU (QUAN TRỌNG) ---
-  
-  // Nếu không tìm thấy sản phẩm nào
-  if (rows.length === 0) return null;
-
-  // SQL trả về nhiều dòng (do 1 sp có nhiều ảnh), ta lấy dòng đầu tiên làm thông tin chính
-  const product = rows[0];
-
-  // Gom tất cả img_link của các dòng lại thành mảng sub_images
-  // Để phục vụ vòng lặp {{#each product.sub_images}} bên View
-  product.sub_images = rows
-    .map(row => row.img_link)
-    .filter(link => link && link !== product.thumbnail); // Lọc bỏ ảnh null hoặc trùng thumbnail
-
-  return product;
+  return findByProductId(productId, userId);
 }
 
 export function addProduct(product) {
