@@ -731,6 +731,487 @@ function scopeActive(query) {
 }
 ```
 
+### Vi phạm 10: Order Authorization Check lặp 8 lần
+
+```javascript
+// services/order.service.js — Xuất hiện ở: submitPayment, confirmPayment,
+// submitShipping, confirmDelivery, submitRating, completeTransaction,
+// sendMessage, getFormattedMessages
+const order = await orderModel.findById(orderId);
+if (!order || (order.buyer_id !== userId && order.seller_id !== userId)) {
+  throw new Error("Unauthorized");
+}
+// Hoặc biến thể buyer-only / seller-only:
+if (!order || order.buyer_id !== userId) throw new Error("Unauthorized");
+if (!order || order.seller_id !== userId) throw new Error("Unauthorized");
+```
+
+**Đề xuất sửa:**
+
+```javascript
+// services/order.service.js
+async function getOrderWithAuth(orderId, userId, requiredRole = null) {
+  const order = await orderModel.findById(orderId);
+  if (!order) throw new Error("Order not found");
+  if (requiredRole === "buyer" && order.buyer_id !== userId)
+    throw new Error("Unauthorized");
+  if (requiredRole === "seller" && order.seller_id !== userId)
+    throw new Error("Unauthorized");
+  if (!requiredRole && order.buyer_id !== userId && order.seller_id !== userId)
+    throw new Error("Unauthorized");
+  return order;
+}
+```
+
+### Vi phạm 11: `postRateBidder`/`putRateBidder` và `postRateSeller`/`putRateSeller` gần giống nhau
+
+```javascript
+// controllers/seller.controller.js — postRateBidder (~L138) và putRateBidder (~L158)
+// Cả hai ~18 dòng, logic giống nhau: extract params → validate → call
+// ratingService.createOrUpdateReview → return JSON. Chỉ khác message.
+
+// controllers/account.controller.js — postRateSeller (~L476) và putRateSeller (~L489)
+// Tương tự: cùng logic, chỉ khác POST lấy seller_id từ body, PUT thì không.
+```
+
+**Đề xuất sửa:** Gộp thành một handler dùng chung cho POST và PUT, hoặc extract shared logic:
+
+```javascript
+async function handleRating(req, res, successMessage) {
+  const { productId, rating, comment, revieweeId } = req.body;
+  const reviewerId = req.session.authUser.id;
+  await ratingService.createOrUpdateReview({
+    reviewer_id: reviewerId,
+    reviewed_user_id: revieweeId,
+    product_id: productId,
+    rating,
+    comment,
+  });
+  res.json({ success: true, message: successMessage });
+}
+```
+
+### Vi phạm 12: `submitRating` trong order.service.js trùng `createOrUpdateReview` trong rating.service.js
+
+```javascript
+// services/order.service.js — submitRating (~L200-L230)
+// Re-implement lại logic create-or-update review thay vì gọi ratingService:
+const existingReview = await reviewModel.findByReviewerAndProduct(
+  reviewerId,
+  productId,
+);
+if (existingReview) {
+  await reviewModel.updateByReviewerAndProduct(reviewerId, productId, {
+    rating,
+    comment,
+  });
+} else {
+  await reviewModel.create({
+    reviewer_id,
+    reviewed_user_id,
+    product_id,
+    rating,
+    comment,
+  });
+}
+// Logic này đã tồn tại trong ratingService.createOrUpdateReview()!
+// Cũng lặp lại trong completeTransaction (~L241-265).
+```
+
+**Đề xuất sửa:** Gọi `ratingService.createOrUpdateReview()` thay vì tự implement lại.
+
+### Vi phạm 13: `findByIdWithDetails` và `findByProductIdWithDetails` gần giống nhau
+
+```javascript
+// models/order.model.js
+// findByIdWithDetails (~L72-96) và findByProductIdWithDetails (~L102-125)
+// Cả hai có cùng 4 LEFT JOINs (products, buyer, seller, categories)
+// và cùng 12+ SELECT columns. Chỉ khác WHERE clause:
+// findByIdWithDetails:             .where('orders.id', orderId)
+// findByProductIdWithDetails:      .where('orders.product_id', productId)
+```
+
+**Đề xuất sửa:**
+
+```javascript
+function buildOrderDetailsQuery() {
+  return db("orders")
+    .leftJoin("products", "orders.product_id", "products.id")
+    .leftJoin("users as buyer", "orders.buyer_id", "buyer.id")
+    .leftJoin("users as seller", "orders.seller_id", "seller.id")
+    .leftJoin("categories", "products.category_id", "categories.id")
+    .select(/* 12+ columns */);
+}
+
+export function findByIdWithDetails(orderId) {
+  return buildOrderDetailsQuery().where("orders.id", orderId).first();
+}
+
+export function findByProductIdWithDetails(productId) {
+  return buildOrderDetailsQuery().where("orders.product_id", productId).first();
+}
+```
+
+### Vi phạm 14: JSON Error Response Pattern lặp 8+ lần
+
+```javascript
+// controllers/product.controller.js — Xuất hiện ở: postSubmitPayment,
+// postConfirmPayment, postSubmitShipping, postConfirmDelivery, postSubmitRating,
+// postCompleteTransaction, postSendMessage, getOrderMessages
+} catch (error) {
+  console.error('... error:', error);
+  res.status(error.message === 'Unauthorized' ? 403 : 500)
+    .json({ error: error.message || 'Failed to ...' });
+}
+```
+
+**Đề xuất sửa:**
+
+```javascript
+// utils/asyncHandler.js
+export function asyncHandler(fn) {
+  return (req, res, next) => {
+    fn(req, res, next).catch((error) => {
+      console.error(error);
+      const status = error.message === "Unauthorized" ? 403 : 500;
+      res.status(status).json({ error: error.message });
+    });
+  };
+}
+```
+
+### Vi phạm 15: Email HTML layout/footer lặp 10+ lần
+
+```javascript
+// Xuất hiện ở:
+// - utils/bidNotification.js (4 templates)
+// - utils/commentNotification.js (2 templates)
+// - services/productDescription.service.js (~L76-92)
+// - scripts/auctionEndNotifier.js (3 inline templates)
+// - controllers/admin/user.controller.js (~L99-115)
+//
+// Tất cả share cùng wrapper HTML:
+`<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+  <div style="background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%);
+    padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0;">...</h1>
+  </div>
+  ...
+  <hr>
+  <p style="color: #999; font-size: 0.8rem;">
+    This is an automated message from Online Auction
+  </p>
+</div>`;
+```
+
+**Đề xuất sửa:**
+
+```javascript
+// utils/emailTemplates.js
+export function emailLayout(headerTitle, bodyHtml, headerColor = "#72AEC8") {
+  return `
+  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <div style="background: linear-gradient(135deg, ${headerColor} 0%, ...); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+      <h1 style="color: white; margin: 0;">${headerTitle}</h1>
+    </div>
+    <div style="padding: 30px; background: #f9f9f9;">
+      ${bodyHtml}
+    </div>
+    <hr>
+    <p style="color: #999; font-size: 0.8rem;">
+      This is an automated message from Online Auction
+    </p>
+  </div>`;
+}
+```
+
+### Vi phạm 16: `normalizeSearchText` trùng lặp giữa model và service
+
+```javascript
+// models/product.model.js (~L4-10) và services/product.service.js (~L428-436)
+// Hàm giống hệt nhau:
+function normalizeSearchText(keywords) {
+  return keywords
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+}
+```
+
+**Đề xuất sửa:** Giữ ở một nơi duy nhất (ví dụ `utils/text.js`) rồi import.
+
+### Vi phạm 17: `formatVND` / `Intl.NumberFormat` lặp 6+ lần
+
+```javascript
+// Mỗi file tự tạo riêng:
+// - utils/bidNotification.js (~L14): const formatVND = (n) => new Intl.NumberFormat('en-US').format(n);
+// - index.js (~L69): format_number helper
+// - services/productDescription.service.js (~L82): inline format
+// - scripts/auctionEndNotifier.js: 3 inline usages
+```
+
+**Đề xuất sửa:**
+
+```javascript
+// utils/format.js
+export function formatVND(amount) {
+  return new Intl.NumberFormat("en-US").format(amount);
+}
+```
+
+### Vi phạm 18: Watchlist LEFT JOIN lặp 4 lần
+
+```javascript
+// models/product.model.js — Xuất hiện ở findByProductId (~L89),
+// searchPageByKeywords (~L165), findByCategoryId (~L206), findByCategoryIds (~L252)
+.leftJoin('watchlists', function() {
+  this.on('products.id', '=', 'watchlists.product_id')
+    .andOnVal('watchlists.user_id', '=', currentUserId || -1);
+})
+```
+
+**Đề xuất sửa:**
+
+```javascript
+function scopeWatchlist(query, userId) {
+  return query.leftJoin("watchlists", function () {
+    this.on("products.id", "=", "watchlists.product_id").andOnVal(
+      "watchlists.user_id",
+      "=",
+      userId || -1,
+    );
+  });
+}
+```
+
+### Vi phạm 19: System Settings defaults lặp 3 lần
+
+```javascript
+// controllers/admin/system.controller.js — Object defaults lặp ở ~L5, ~L29, ~L47
+const settings = {
+  new_product_limit_minutes: 60,
+  auto_extend_trigger_minutes: 5,
+  auto_extend_duration_minutes: 10,
+};
+// Và array-to-object conversion loop cũng lặp 2 lần:
+settingsArray.forEach((setting) => {
+  settings[setting.key] = parseInt(setting.value);
+});
+```
+
+**Đề xuất sửa:**
+
+```javascript
+const DEFAULT_SETTINGS = {
+  new_product_limit_minutes: 60,
+  auto_extend_trigger_minutes: 5,
+  auto_extend_duration_minutes: 10,
+};
+
+async function getSettingsWithDefaults() {
+  const settings = { ...DEFAULT_SETTINGS };
+  const settingsArray = await systemSettingModel.findAll();
+  settingsArray.forEach((s) => {
+    settings[s.key] = parseInt(s.value);
+  });
+  return settings;
+}
+```
+
+### Vi phạm 20: Product Status CASE SQL lặp 3 lần
+
+```javascript
+// models/product.model.js — findAllProductsBySellerId (~L473),
+//   findExpiredProductsBySellerId (~L528)
+// models/autoBidding.model.js — getWonAuctionsByBidderId (~L120)
+//
+// CASE WHEN is_sold IS TRUE THEN 'Sold'
+//      WHEN is_sold IS FALSE THEN 'Cancelled'
+//      WHEN end_at <= NOW() AND highest_bidder_id IS NOT NULL THEN 'Pending'
+//      WHEN end_at <= NOW() AND highest_bidder_id IS NULL THEN 'Expired'
+//      ELSE 'Active' END AS status
+```
+
+**Đề xuất sửa:**
+
+```javascript
+const PRODUCT_STATUS_CASE = db.raw(`
+  CASE
+    WHEN products.is_sold IS TRUE THEN 'Sold'
+    WHEN products.is_sold IS FALSE THEN 'Cancelled'
+    WHEN products.end_at <= NOW() AND products.highest_bidder_id IS NOT NULL THEN 'Pending'
+    WHEN products.end_at <= NOW() AND products.highest_bidder_id IS NULL THEN 'Expired'
+    ELSE 'Active'
+  END AS status
+`);
+```
+
+### Vi phạm 21: Review Rating Check Pattern lặp 3 lần
+
+```javascript
+// controllers/seller.controller.js — getSoldProducts (~L57), getExpiredProducts (~L72)
+// controllers/account.controller.js — getAuctions (~L474)
+const review = await reviewModel.getProductReview(userId, bidderId, product.id);
+const hasActualReview = review && review.rating !== 0;
+product.hasReview = hasActualReview;
+product.reviewRating = hasActualReview
+  ? review.rating === 1
+    ? "positive"
+    : "negative"
+  : null;
+product.reviewComment = hasActualReview ? review.comment : "";
+```
+
+**Đề xuất sửa:**
+
+```javascript
+// utils/reviewHelper.js
+export async function enrichProductWithReview(product, reviewerId, revieweeId) {
+  const review = await reviewModel.getProductReview(
+    reviewerId,
+    revieweeId,
+    product.id,
+  );
+  const hasActualReview = review && review.rating !== 0;
+  product.hasReview = hasActualReview;
+  product.reviewRating = hasActualReview
+    ? review.rating === 1
+      ? "positive"
+      : "negative"
+    : null;
+  product.reviewComment = hasActualReview ? review.comment : "";
+  return product;
+}
+```
+
+### Vi phạm 22: Gather bidders + commenters cho notification lặp 2 lần
+
+```javascript
+// utils/commentNotification.js (~L22-35) và
+// services/productDescription.service.js (~L49-60)
+const [bidders, commenters] = await Promise.all([
+  biddingHistoryModel.getUniqueBidders(productId),
+  productCommentModel.getUniqueCommenters(productId),
+]);
+const recipientsMap = new Map();
+bidders.forEach((b) => {
+  if (b.id !== sellerId) recipientsMap.set(b.id, b);
+});
+commenters.forEach((c) => {
+  if (c.id !== sellerId) recipientsMap.set(c.id, c);
+});
+```
+
+**Đề xuất sửa:**
+
+```javascript
+// utils/notificationHelper.js
+export async function getProductNotificationRecipients(
+  productId,
+  excludeUserId,
+) {
+  const [bidders, commenters] = await Promise.all([
+    biddingHistoryModel.getUniqueBidders(productId),
+    productCommentModel.getUniqueCommenters(productId),
+  ]);
+  const recipientsMap = new Map();
+  [...bidders, ...commenters].forEach((u) => {
+    if (u.id !== excludeUserId) recipientsMap.set(u.id, u);
+  });
+  return Array.from(recipientsMap.values());
+}
+```
+
+### Vi phạm 23: Seller Product List queries lặp 4 lần
+
+```javascript
+// models/product.model.js
+// findActiveProductsBySellerId, findPendingProductsBySellerId,
+// findSoldProductsBySellerId, findExpiredProductsBySellerId
+// Tất cả bắt đầu với cùng base query:
+db("products")
+  .leftJoin("categories", "products.category_id", "categories.id")
+  .where("seller_id", sellerId)
+  .select("products.*", "categories.name as category_name", BID_COUNT_SUBQUERY);
+// Chỉ khác nhau ở filter conditions
+```
+
+**Đề xuất sửa:**
+
+```javascript
+function buildSellerProductQuery(sellerId) {
+  return db("products")
+    .leftJoin("categories", "products.category_id", "categories.id")
+    .where("seller_id", sellerId)
+    .select(
+      "products.*",
+      "categories.name as category_name",
+      BID_COUNT_SUBQUERY,
+    );
+}
+
+export function findActiveProductsBySellerId(sellerId) {
+  return buildSellerProductQuery(sellerId)
+    .where("products.end_at", ">", new Date())
+    .whereNull("products.closed_at");
+}
+// ... tương tự cho pending, sold, expired
+```
+
+### Vi phạm 24: Date formatting logic trùng
+
+```javascript
+// index.js — Handlebars helper format_date (~L96-106)
+// services/order.service.js — formatMessagesHtml (~L303-310)
+// Logic giống nhau:
+const hour = String(d.getHours()).padStart(2, "0");
+const minute = String(d.getMinutes()).padStart(2, "0");
+const second = String(d.getSeconds()).padStart(2, "0");
+const day = String(d.getDate()).padStart(2, "0");
+const month = String(d.getMonth() + 1).padStart(2, "0");
+const year = d.getFullYear();
+return `${hour}:${minute}:${second} ${day}/${month}/${year}`;
+```
+
+**Đề xuất sửa:**
+
+```javascript
+// utils/format.js
+export function formatDateTime(date) {
+  const d = new Date(date);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+```
+
+### Vi phạm 25: Category base query lặp 2 lần
+
+```javascript
+// models/category.model.js
+// findByCategoryId (~L3-17) và findAll (~L33-45) dùng cùng base query:
+db("categories as c")
+  .leftJoin("categories as parent", "c.parent_id", "parent.id")
+  .leftJoin("products as p", "c.id", "p.category_id")
+  .select("c.id", "c.name", "c.parent_id", "parent.name as parent_name")
+  .count("p.id as product_count")
+  .groupBy("c.id", "c.name", "c.parent_id", "parent.name");
+```
+
+**Đề xuất sửa:**
+
+```javascript
+function baseCategoryQuery() {
+  return db("categories as c")
+    .leftJoin("categories as parent", "c.parent_id", "parent.id")
+    .leftJoin("products as p", "c.id", "p.category_id")
+    .select("c.id", "c.name", "c.parent_id", "parent.name as parent_name")
+    .count("p.id as product_count")
+    .groupBy("c.id", "c.name", "c.parent_id", "parent.name");
+}
+```
+
 ---
 
 ## 5. Vi phạm nguyên lý YAGNI (You Ain't Gonna Need It)
@@ -1016,7 +1497,7 @@ auctionEvents.on("bid_placed", async (data) => {
 | **ISP**   | 🟡 Trung bình   | 1 vi phạm        | Import thừa                   |
 | **DIP**   | 🔴 Nghiêm trọng | 3 vi phạm        | Security risk, tight coupling |
 | **KISS**  | 🟡 Trung bình   | 4 vi phạm        | Khó đọc, khó debug            |
-| **DRY**   | 🔴 Nghiêm trọng | 9 vi phạm        | Code duplication lớn          |
+| **DRY**   | 🔴 Nghiêm trọng | 25 vi phạm       | Code duplication lớn          |
 | **YAGNI** | 🟡 Trung bình   | 6 vi phạm        | Dead code, bloat              |
 
 **Top 3 việc cần làm ngay:**
