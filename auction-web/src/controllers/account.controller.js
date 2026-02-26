@@ -6,25 +6,16 @@ import * as reviewModel from '../models/review.model.js';
 import * as autoBiddingModel from '../models/autoBidding.model.js';
 import { sendMail } from '../utils/mailer.js';
 import { generateAndSendOtp } from '../services/otp.service.js';
+import * as ratingService from '../services/rating.service.js';
 
 export const getRatings = async (req, res) => {
   const currentUserId = req.session.authUser.id;
   
-  const ratingData = await reviewModel.calculateRatingPoint(currentUserId);
-  const rating_point = ratingData ? ratingData.rating_point : 0;
-  const reviews = await reviewModel.getReviewsByUserId(currentUserId);
-  
-  const totalReviews = reviews.length;
-  const positiveReviews = reviews.filter(r => r.rating === 1).length;
-  const negativeReviews = reviews.filter(r => r.rating === -1).length;
+  const ratingDetails = await ratingService.getRatingDetails(currentUserId);
   
   res.render('vwAccount/rating', { 
     activeSection: 'ratings',
-    rating_point,
-    reviews,
-    totalReviews,
-    positiveReviews,
-    negativeReviews
+    ...ratingDetails
   });
 };
 
@@ -498,23 +489,7 @@ export const postRateSeller = async (req, res) => {
     const productId = req.params.productId;
     const { seller_id, rating, comment } = req.body;
     
-    const ratingValue = rating === 'positive' ? 1 : -1;
-    
-    const existingReview = await reviewModel.findByReviewerAndProduct(currentUserId, productId);
-    if (existingReview) {
-      await reviewModel.updateByReviewerAndProduct(currentUserId, productId, {
-        rating: ratingValue,
-        comment: comment || null
-      });
-    } else {
-      await reviewModel.create({
-        reviewer_id: currentUserId,
-        reviewed_user_id: seller_id,
-        product_id: productId,
-        rating: ratingValue,
-        comment: comment || null
-      });
-    }
+    await ratingService.createOrUpdateReview(currentUserId, seller_id, productId, rating, comment);
     
     res.json({ success: true });
   } catch (error) {
@@ -529,12 +504,7 @@ export const putRateSeller = async (req, res) => {
     const productId = req.params.productId;
     const { rating, comment } = req.body;
     
-    const ratingValue = rating === 'positive' ? 1 : -1;
-    
-    await reviewModel.updateByReviewerAndProduct(currentUserId, productId, {
-      rating: ratingValue,
-      comment: comment || null
-    });
+    await ratingService.createOrUpdateReview(currentUserId, null, productId, rating, comment);
     
     res.json({ success: true });
   } catch (error) {

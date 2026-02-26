@@ -6,6 +6,7 @@ import * as biddingService from './bidding.service.js';
 import * as commentService from './comment.service.js';
 import * as ratingService from './rating.service.js';
 import * as rejectedBidderService from './rejectedBidder.service.js';
+import db from '../utils/db.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -332,4 +333,103 @@ export async function getProductDetail(productId, userId, commentPage = 1) {
 
     showPaymentButton
   };
+}
+
+
+// ============================================================
+// SELLER STATS (extracted from product.model.js)
+// ============================================================
+
+/**
+ * Aggregation logic cho dashboard seller: tổng hợp 7 query song song
+ * và tính toán revenue.
+ */
+export async function getSellerStats(sellerId) {
+  const [total, active, sold, pending, expired, pendingRevenue, completedRevenue] = await Promise.all([
+    productModel.countProductsBySellerId(sellerId),
+    productModel.countActiveProductsBySellerId(sellerId),
+    productModel.countSoldProductsBySellerId(sellerId),
+    productModel.countPendingProductsBySellerId(sellerId),
+    productModel.countExpiredProductsBySellerId(sellerId),
+    productModel.sumPendingRevenue(sellerId),
+    productModel.sumCompletedRevenue(sellerId),
+  ]);
+
+  const pendingRev = parseFloat(pendingRevenue.revenue) || 0;
+  const completedRev = parseFloat(completedRevenue.revenue) || 0;
+
+  return {
+    total_products: parseInt(total.count) || 0,
+    active_products: parseInt(active.count) || 0,
+    sold_products: parseInt(sold.count) || 0,
+    pending_products: parseInt(pending.count) || 0,
+    expired_products: parseInt(expired.count) || 0,
+    pending_revenue: pendingRev,
+    completed_revenue: completedRev,
+    total_revenue: pendingRev + completedRev,
+  };
+}
+
+
+// ============================================================
+// CANCEL PRODUCT (extracted from product.model.js)
+// ============================================================
+
+/**
+ * Multi-step: verify seller → cancel active orders → update product state.
+ */
+export async function cancelProduct(productId, sellerId) {
+  // Get product to verify seller
+  const product = await db('products')
+    .where('id', productId)
+    .first();
+
+  if (!product) {
+    throw new Error('Product not found');
+  }
+
+  if (product.seller_id !== sellerId) {
+    throw new Error('Unauthorized');
+  }
+
+  // Cancel any active orders for this product
+  const activeOrders = await db('orders')
+    .where('product_id', productId)
+    .whereNotIn('status', ['completed', 'cancelled']);
+
+  for (let order of activeOrders) {
+    await db('orders')
+      .where('id', order.id)
+      .update({
+        status: 'cancelled',
+        cancelled_by: sellerId,
+        cancellation_reason: 'Seller cancelled the product',
+        cancelled_at: new Date(),
+      });
+  }
+
+  // Update product - mark as cancelled
+  await productModel.updateProduct(productId, {
+    is_sold: false,
+    closed_at: new Date(),
+  });
+
+  return product;
+}
+
+
+// ============================================================
+// TEXT NORMALIZE HELPER (extracted from duplicate in product.model.js)
+// ============================================================
+
+/**
+ * Normalize text cho full-text search (xóa dấu tiếng Việt)
+ */
+export function normalizeSearchText(keywords) {
+  return keywords
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
 }

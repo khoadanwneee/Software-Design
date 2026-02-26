@@ -1,5 +1,15 @@
 import db from '../utils/db.js';
 
+// Helper: Normalize text cho full-text search (xóa dấu tiếng Việt)
+function normalizeSearchText(keywords) {
+  return keywords
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+}
+
 // Reusable query fragments
 const BID_COUNT_SUBQUERY = db.raw(
   '(SELECT COUNT(*) FROM bidding_history WHERE bidding_history.product_id = products.id) AS bid_count'
@@ -84,11 +94,7 @@ export function findPage(limit, offset) {
 
 // 1. Hàm tìm kiếm phân trang (Simplified FTS - Search in product name and category)
 export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'or', sort = '') {
-  // Remove accents from keywords for search
-  const searchQuery = keywords.toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
-    .replace(/đ/g, 'd').replace(/Đ/g, 'D'); // Vietnamese d
+  const searchQuery = normalizeSearchText(keywords);
   
   let query = db('products')
     .leftJoin('categories', 'products.category_id', 'categories.id')
@@ -151,11 +157,7 @@ export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'o
 
 // 2. Hàm đếm tổng số lượng (Simplified)
 export function countByKeywords(keywords, logic = 'or') {
-  // Remove accents from keywords for search
-  const searchQuery = keywords.toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd').replace(/Đ/g, 'D');
+  const searchQuery = normalizeSearchText(keywords);
   
   return db('products')
     .leftJoin('categories', 'products.category_id', 'categories.id')
@@ -499,44 +501,37 @@ export function countExpiredProductsBySellerId(sellerId) {
 }
 
 export async function getSellerStats(sellerId) {
-  const [total, active, sold, pending, expired, pendingRevenue, completedRevenue] = await Promise.all([
-    countProductsBySellerId(sellerId),
-    countActiveProductsBySellerId(sellerId),
-    countSoldProductsBySellerId(sellerId),
-    countPendingProductsBySellerId(sellerId),
-    countExpiredProductsBySellerId(sellerId),
-    // Pending Revenue: Sản phẩm hết hạn hoặc closed, có người thắng nhưng chưa thanh toán
-    db('products')
-      .where('seller_id', sellerId)
-      .where(function() {
-        this.where('end_at', '<=', new Date())
-          .orWhereNotNull('closed_at');
-      })
-      .whereNotNull('highest_bidder_id')
-      .whereNull('is_sold')
-      .sum('current_price as revenue')
-      .first(),
-    // Completed Revenue: Sản phẩm đã bán thành công
-    db('products')
-      .where('seller_id', sellerId)
-      .where('is_sold', true)
-      .sum('current_price as revenue')
-      .first()
-  ]);
+  // DEPRECATED: Business logic moved to product.service.js getSellerStats()
+  // This function is kept for backward compatibility
+  const { getSellerStats: getStats } = await import('../services/product.service.js');
+  return getStats(sellerId);
+}
 
-  const pendingRev = parseFloat(pendingRevenue.revenue) || 0;
-  const completedRev = parseFloat(completedRevenue.revenue) || 0;
+/**
+ * Sum pending revenue (sản phẩm hết hạn/closed, có người thắng nhưng chưa thanh toán)
+ */
+export function sumPendingRevenue(sellerId) {
+  return db('products')
+    .where('seller_id', sellerId)
+    .where(function() {
+      this.where('end_at', '<=', new Date())
+        .orWhereNotNull('closed_at');
+    })
+    .whereNotNull('highest_bidder_id')
+    .whereNull('is_sold')
+    .sum('current_price as revenue')
+    .first();
+}
 
-  return {
-    total_products: parseInt(total.count) || 0,
-    active_products: parseInt(active.count) || 0,
-    sold_products: parseInt(sold.count) || 0,
-    pending_products: parseInt(pending.count) || 0,
-    expired_products: parseInt(expired.count) || 0,
-    pending_revenue: pendingRev,
-    completed_revenue: completedRev,
-    total_revenue: pendingRev + completedRev
-  };
+/**
+ * Sum completed revenue (sản phẩm đã bán thành công)
+ */
+export function sumCompletedRevenue(sellerId) {
+  return db('products')
+    .where('seller_id', sellerId)
+    .where('is_sold', true)
+    .sum('current_price as revenue')
+    .first();
 }
 
 export function findAllProductsBySellerId(sellerId) {
@@ -684,44 +679,10 @@ export async function getPendingProductsStats(sellerId) {
 }
 
 export async function cancelProduct(productId, sellerId) {
-  // Get product to verify seller
-  const product = await db('products')
-    .where('id', productId)
-    .first();
-  
-  if (!product) {
-    throw new Error('Product not found');
-  }
-  
-  if (product.seller_id !== sellerId) {
-    throw new Error('Unauthorized');
-  }
-  
-  // Cancel any active orders for this product
-  const activeOrders = await db('orders')
-    .where('product_id', productId)
-    .whereNotIn('status', ['completed', 'cancelled']);
-  
-  // Cancel all active orders
-  for (let order of activeOrders) {
-    await db('orders')
-      .where('id', order.id)
-      .update({
-        status: 'cancelled',
-        cancelled_by: sellerId,
-        cancellation_reason: 'Seller cancelled the product',
-        cancelled_at: new Date()
-      });
-  }
-  
-  // Update product - mark as cancelled
-  await updateProduct(productId, {
-    is_sold: false,
-    closed_at: new Date()
-  });
-  
-  // Return product data for route to use
-  return product;
+  // DEPRECATED: Business logic moved to product.service.js cancelProduct()
+  // This function is kept for backward compatibility
+  const { cancelProduct: cancel } = await import('../services/product.service.js');
+  return cancel(productId, sellerId);
 }
 
 /**

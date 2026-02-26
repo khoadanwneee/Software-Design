@@ -1,14 +1,14 @@
 import * as productModel from '../models/product.model.js';
 import * as reviewModel from '../models/review.model.js';
 import * as productDescUpdateModel from '../models/productDescriptionUpdate.model.js';
-import * as biddingHistoryModel from '../models/biddingHistory.model.js';
-import * as productCommentModel from '../models/productComment.model.js';
-import { sendMail } from '../utils/mailer.js';
 import { buildProductData, createProductWithImages } from '../services/product.service.js';
+import * as productService from '../services/product.service.js';
+import * as ratingService from '../services/rating.service.js';
+import * as productDescriptionService from '../services/productDescription.service.js';
 
 export const getDashboard = async (req, res) => {
     const sellerId = req.session.authUser.id;
-    const stats = await productModel.getSellerStats(sellerId);
+    const stats = await productService.getSellerStats(sellerId);
     res.render('vwSeller/dashboard', { stats });
 };
 
@@ -104,18 +104,13 @@ export const postCancelProduct = async (req, res) => {
         const sellerId = req.session.authUser.id;
         const { reason, highest_bidder_id } = req.body;
         
-        const product = await productModel.cancelProduct(productId, sellerId);
+        await productService.cancelProduct(productId, sellerId);
         
         if (highest_bidder_id) {
-            const reviewModule = await import('../models/review.model.js');
-            const reviewData = {
-                reviewer_id: sellerId,
-                reviewee_id: highest_bidder_id,
-                product_id: productId,
-                rating: -1,
-                comment: reason || 'Auction cancelled by seller'
-            };
-            await reviewModule.createReview(reviewData);
+            await ratingService.createOrUpdateReview(
+                sellerId, highest_bidder_id, productId,
+                'negative', reason || 'Auction cancelled by seller'
+            );
         }
         
         res.json({ success: true, message: 'Auction cancelled successfully' });
@@ -143,25 +138,7 @@ export const postRateBidder = async (req, res) => {
             return res.status(400).json({ success: false, message: 'No bidder to rate' });
         }
         
-        const ratingValue = rating === 'positive' ? 1 : -1;
-        
-        const existingReview = await reviewModel.findByReviewerAndProduct(sellerId, productId);
-        
-        if (existingReview) {
-            await reviewModel.updateByReviewerAndProduct(sellerId, productId, {
-                rating: ratingValue,
-                comment: comment || null
-            });
-        } else {
-            const reviewData = {
-                reviewer_id: sellerId,
-                reviewee_id: highest_bidder_id,
-                product_id: productId,
-                rating: ratingValue,
-                comment: comment || ''
-            };
-            await reviewModel.createReview(reviewData);
-        }
+        await ratingService.createOrUpdateReview(sellerId, highest_bidder_id, productId, rating, comment);
         
         res.json({ success: true, message: 'Rating submitted successfully' });
     } catch (error) {
@@ -180,12 +157,7 @@ export const putRateBidder = async (req, res) => {
             return res.status(400).json({ success: false, message: 'No bidder to rate' });
         }
         
-        const ratingValue = rating === 'positive' ? 1 : -1;
-        
-        await reviewModel.updateReview(sellerId, highest_bidder_id, productId, {
-            rating: ratingValue,
-            comment: comment || ''
-        });
+        await ratingService.createOrUpdateReview(sellerId, highest_bidder_id, productId, rating, comment);
         
         res.json({ success: true, message: 'Rating updated successfully' });
     } catch (error) {
@@ -199,73 +171,18 @@ export const postAppendDescription = async (req, res) => {
         const productId = req.params.id;
         const sellerId = req.session.authUser.id;
         const { description } = req.body;
-        
-        if (!description || description.trim() === '') {
-            return res.status(400).json({ success: false, message: 'Description is required' });
-        }
-        
-        const product = await productModel.findByProductId2(productId, null);
-        if (!product) {
-            return res.status(404).json({ success: false, message: 'Product not found' });
-        }
-        
-        if (product.seller_id !== sellerId) {
-            return res.status(403).json({ success: false, message: 'Unauthorized' });
-        }
-        
-        await productDescUpdateModel.addUpdate(productId, description.trim());
-        
-        const [bidders, commenters] = await Promise.all([
-            biddingHistoryModel.getUniqueBidders(productId),
-            productCommentModel.getUniqueCommenters(productId)
-        ]);
-        
-        const notifyMap = new Map();
-        [...bidders, ...commenters].forEach(user => {
-            if (user.id !== sellerId && !notifyMap.has(user.email)) {
-                notifyMap.set(user.email, user);
-            }
-        });
-        
-        const notifyUsers = Array.from(notifyMap.values());
-        if (notifyUsers.length > 0) {
-            const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
-            
-            Promise.all(notifyUsers.map(user => {
-                return sendMail({
-                    to: user.email,
-                    subject: `[Auction Update] New description added for "${product.name}"`,
-                    html: `
-                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                            <div style="background: linear-gradient(135deg, #72AEC8 0%, #5a9bb8 100%); padding: 20px; text-align: center;">
-                                <h1 style="color: white; margin: 0;">Product Description Updated</h1>
-                            </div>
-                            <div style="padding: 20px; background: #f9f9f9;">
-                                <p>Hello <strong>${user.fullname}</strong>,</p>
-                                <p>The seller has added new information to the product description:</p>
-                                <div style="background: white; padding: 15px; border-left: 4px solid #72AEC8; margin: 15px 0;">
-                                    <h3 style="margin: 0 0 10px 0; color: #333;">${product.name}</h3>
-                                    <p style="margin: 0; color: #666;">Current Price: <strong style="color: #72AEC8;">${new Intl.NumberFormat('en-US').format(product.current_price)} VND</strong></p>
-                                </div>
-                                <div style="background: #fff8e1; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                                    <p style="margin: 0 0 10px 0; font-weight: bold; color: #f57c00;"><i>✉</i> New Description Added:</p>
-                                    <div style="color: #333;">${description.trim()}</div>
-                                </div>
-                                <p>View the product to see the full updated description:</p>
-                                <a href="${productUrl}" style="display: inline-block; background: #72AEC8; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin: 10px 0;">View Product</a>
-                                <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-                                <p style="color: #999; font-size: 12px;">You received this email because you placed a bid or asked a question on this product.</p>
-                            </div>
-                        </div>
-                    `
-                }).catch(err => console.error('Failed to send email to', user.email, err));
-            })).catch(err => console.error('Email notification error:', err));
-        }
-        
+        const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
+
+        await productDescriptionService.appendDescriptionAndNotify({ productId, sellerId, description, productUrl });
+
         res.json({ success: true, message: 'Description appended successfully' });
     } catch (error) {
         console.error('Append description error:', error);
-        res.status(500).json({ success: false, message: 'Server error' });
+        const status = error.message === 'Product not found' ? 404 
+            : error.message === 'Unauthorized' ? 403 
+            : error.message === 'Description is required' ? 400 
+            : 500;
+        res.status(status).json({ success: false, message: error.message || 'Server error' });
     }
 };
 
