@@ -8,12 +8,7 @@
 import * as userModel from '../models/user.model.js';
 import { sendMail } from './mailer.js';
 import { emailLayout } from './emailTemplates.js';
-
-// ============ HELPERS ============
-
-function formatVND(amount) {
-  return new Intl.NumberFormat('en-US').format(amount);
-}
+import { formatVND } from './format.js';
 
 // ============ EMAIL TEMPLATES ============
 

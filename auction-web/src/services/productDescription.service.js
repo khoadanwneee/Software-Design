@@ -4,6 +4,7 @@ import * as biddingHistoryModel from '../models/biddingHistory.model.js';
 import * as productCommentModel from '../models/productComment.model.js';
 import { sendMail } from '../utils/mailer.js';
 import { emailLayout } from '../utils/emailTemplates.js';
+import { formatVND } from '../utils/format.js';
 
 /**
  * ============================================
@@ -93,7 +94,7 @@ function buildDescUpdateEmailHtml(user, product, description, productUrl) {
         <p>The seller has added new information to the product description:</p>
         <div style="background: white; padding: 15px; border-left: 4px solid #72AEC8; margin: 15px 0;">
           <h3 style="margin: 0 0 10px 0; color: #333;">${product.name}</h3>
-          <p style="margin: 0; color: #666;">Current Price: <strong style="color: #72AEC8;">${new Intl.NumberFormat('en-US').format(product.current_price)} VND</strong></p>
+          <p style="margin: 0; color: #666;">Current Price: <strong style="color: #72AEC8;">${formatVND(product.current_price)} VND</strong></p>
         </div>
         <div style="background: #fff8e1; padding: 15px; border-radius: 5px; margin: 15px 0;">
           <p style="margin: 0 0 10px 0; font-weight: bold; color: #f57c00;"><i>✉</i> New Description Added:</p>

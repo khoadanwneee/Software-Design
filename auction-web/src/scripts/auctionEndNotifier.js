@@ -6,6 +6,7 @@
 import * as productModel from '../models/product.model.js';
 import { sendMail } from '../utils/mailer.js';
 import { emailLayout } from '../utils/emailTemplates.js';
+import { formatVND } from '../utils/format.js';
 
 /**
  * Kiểm tra các đấu giá kết thúc và gửi email thông báo
@@ -34,7 +35,7 @@ export async function checkAndNotifyEndedAuctions() {
                     <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #28a745;">
                       <h3 style="margin: 0 0 10px 0; color: #333;">${auction.name}</h3>
                       <p style="font-size: 24px; color: #28a745; margin: 0; font-weight: bold;">
-                        ${new Intl.NumberFormat('en-US').format(auction.current_price)} VND
+                        ${formatVND(auction.current_price)} VND
                       </p>
                     </div>
                     <p>Please complete your payment to finalize the purchase.</p>
@@ -61,7 +62,7 @@ export async function checkAndNotifyEndedAuctions() {
                       <h3 style="margin: 0 0 10px 0; color: #333;">${auction.name}</h3>
                       <p style="margin: 5px 0;"><strong>Winner:</strong> ${auction.winner_name}</p>
                       <p style="font-size: 24px; color: #72AEC8; margin: 10px 0 0 0; font-weight: bold;">
-                        ${new Intl.NumberFormat('en-US').format(auction.current_price)} VND
+                        ${formatVND(auction.current_price)} VND
                       </p>
                     </div>
                     <p>The winner has been notified to complete payment. You will receive another notification once payment is confirmed.</p>

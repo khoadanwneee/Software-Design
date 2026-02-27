@@ -1,4 +1,5 @@
 import db from '../utils/db.js';
+import { PRODUCT_STATUS_CASE } from './product.model.js';
 
 /**
  * Thêm hoặc cập nhật auto bidding record cho một bidder
@@ -116,13 +117,7 @@ export async function getWonAuctionsByBidderId(bidderId) {
       'categories.name as category_name',
       'seller.fullname as seller_name',
       'seller.email as seller_email',
-      db.raw(`
-        CASE
-          WHEN products.is_sold IS TRUE THEN 'Sold'
-          WHEN products.is_sold IS FALSE THEN 'Cancelled'
-          WHEN (products.end_at <= NOW() OR products.closed_at IS NOT NULL) AND products.is_sold IS NULL THEN 'Pending'
-        END AS status
-      `),
+      PRODUCT_STATUS_CASE,
       db.raw(`
         (
           SELECT COUNT(*) 

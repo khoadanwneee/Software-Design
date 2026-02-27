@@ -494,14 +494,5 @@ export function deleteProduct(id) {
 // TEXT NORMALIZE HELPER (extracted from duplicate in product.model.js)
 // ============================================================
 
-/**
- * Normalize text cho full-text search (xóa dấu tiếng Việt)
- */
-export function normalizeSearchText(keywords) {
-  return keywords
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D');
-}
+// Re-export normalizeSearchText from shared utility (DRY Fix — Vi phạm 16)
+export { normalizeSearchText } from '../utils/text.js';

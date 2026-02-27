@@ -1,14 +1,5 @@
 import db from '../utils/db.js';
-
-// Helper: Normalize text cho full-text search (xóa dấu tiếng Việt)
-function normalizeSearchText(keywords) {
-  return keywords
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D');
-}
+import { normalizeSearchText } from '../utils/text.js';
 
 // Reusable query fragments
 const BID_COUNT_SUBQUERY = db.raw(
@@ -23,17 +14,27 @@ const IS_FAVORITE_CHECK = db.raw(
   'watchlists.product_id IS NOT NULL AS is_favorite'
 );
 
-/**
- * DRY Fix: Điều kiện lọc sản phẩm ACTIVE xuất hiện 7+ lần trong file.
- * Thay vì lặp .where('products.end_at', '>', new Date()).whereNull('products.closed_at')
- * ở mỗi hàm, gọi .modify(scopeActive) cho gọn và nhất quán.
- *
- * Dùng với Knex .modify(): query.modify(scopeActive)
- */
+export const PRODUCT_STATUS_CASE = db.raw(`
+  CASE
+    WHEN products.is_sold IS TRUE THEN 'Sold'
+    WHEN products.is_sold IS FALSE THEN 'Cancelled'
+    WHEN (products.end_at <= NOW() OR products.closed_at IS NOT NULL) AND products.highest_bidder_id IS NOT NULL AND products.is_sold IS NULL THEN 'Pending'
+    WHEN products.end_at <= NOW() AND products.highest_bidder_id IS NULL THEN 'No Bidders'
+    WHEN products.end_at > NOW() AND products.closed_at IS NULL THEN 'Active'
+  END AS status
+`);
+
 function scopeActive(query) {
   return query
     .where('products.end_at', '>', new Date())
     .whereNull('products.closed_at');
+}
+
+function scopeWatchlist(query, userId) {
+  return query.leftJoin('watchlists', function() {
+    this.on('products.id', '=', 'watchlists.product_id')
+      .andOnVal('watchlists.user_id', '=', userId || -1);
+  });
 }
 
 export function findAll() {
@@ -87,10 +88,7 @@ export async function findByProductId(productId, userId, { maskBidderName = true
     .leftJoin('users as seller', 'products.seller_id', 'seller.id')
     .leftJoin('product_images', 'products.id', 'product_images.product_id')
     .leftJoin('categories', 'products.category_id', 'categories.id')
-    .leftJoin('watchlists', function() {
-      this.on('products.id', '=', 'watchlists.product_id')
-        .andOnVal('watchlists.user_id', '=', userId || -1);
-    })
+    .modify(scopeWatchlist, userId)
     .where('products.id', productId)
     .select(selectColumns);
 
@@ -160,10 +158,7 @@ function buildSearchQuery(keywords, logic) {
 export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'or', sort = '') {
   let query = buildSearchQuery(keywords, logic)
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    .leftJoin('watchlists', function() {
-      this.on('products.id', '=', 'watchlists.product_id')
-        .andOnVal('watchlists.user_id', '=', userId || -1);
-    })
+    .modify(scopeWatchlist, userId)
     .select(
       'products.*',
       'categories.name as category_name',
@@ -202,11 +197,7 @@ export function findByCategoryId(categoryId, limit, offset, sort, currentUserId)
 
   return db('products')
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    
-    .leftJoin('watchlists', function() {
-      this.on('products.id', '=', 'watchlists.product_id')
-        .andOnVal('watchlists.user_id', '=', currentUserId || -1); 
-    })
+    .modify(scopeWatchlist, currentUserId)
     .where('products.category_id', categoryId)
     .modify(scopeActive)
     .select(
@@ -247,10 +238,7 @@ export function countByCategoryId(categoryId) {
 export function findByCategoryIds(categoryIds, limit, offset, sort, currentUserId) {
   return db('products')
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    .leftJoin('watchlists', function() {
-      this.on('products.id', '=', 'watchlists.product_id')
-        .andOnVal('watchlists.user_id', '=', currentUserId || -1);
-    })
+    .modify(scopeWatchlist, currentUserId)
     .whereIn('products.category_id', categoryIds)
     .modify(scopeActive)
     .select(
@@ -457,15 +445,7 @@ export function findAllProductsBySellerId(sellerId) {
     .select(
       'products.*', 'categories.name as category_name',
       BID_COUNT_SUBQUERY,
-      db.raw(`
-        CASE
-          WHEN is_sold IS TRUE THEN 'Sold'
-          WHEN is_sold IS FALSE THEN 'Cancelled'
-          WHEN (end_at <= NOW() OR closed_at IS NOT NULL) AND highest_bidder_id IS NOT NULL AND is_sold IS NULL THEN 'Pending'
-          WHEN end_at <= NOW() AND highest_bidder_id IS NULL THEN 'No Bidders'
-          WHEN end_at > NOW() AND closed_at IS NULL THEN 'Active'
-        END AS status
-      `)
+      PRODUCT_STATUS_CASE
     );
 }
 
@@ -531,12 +511,7 @@ export function findExpiredProductsBySellerId(sellerId) {
     .select(
       'products.*',
       'categories.name as category_name',
-      db.raw(`
-        CASE
-          WHEN highest_bidder_id IS NULL THEN 'No Bidders'
-          ELSE 'Cancelled'
-        END AS status
-      `)
+      PRODUCT_STATUS_CASE
     );
 }
 

@@ -10,6 +10,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import passport from './utils/passport.js';
+import { formatVND } from './utils/format.js';
 
 // Import Scheduled Jobs
 import { startAuctionEndNotifier } from './scripts/auctionEndNotifier.js';
@@ -63,7 +64,7 @@ app.engine('handlebars', engine({
     section: expressHandlebarsSections(),
     eq(a, b) { return a === b; },
     add(a, b) { return a + b; },
-    format_number(price) { return new Intl.NumberFormat('en-US').format(price); },
+    format_number(price) { return formatVND(price); },
     mask_name(fullname) {
       if (!fullname) return null;
       const name = fullname.trim();
