@@ -3,6 +3,7 @@ import * as productModel from '../models/product.model.js';
 import * as biddingHistoryModel from '../models/biddingHistory.model.js';
 import * as productCommentModel from '../models/productComment.model.js';
 import { sendMail } from '../utils/mailer.js';
+import { emailLayout } from '../utils/emailTemplates.js';
 
 /**
  * ============================================
@@ -74,12 +75,7 @@ function sendDescriptionUpdateNotifications({ productId, sellerId, product, desc
 }
 
 function buildDescUpdateEmailHtml(user, product, description, productUrl) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, #72AEC8 0%, #5a9bb8 100%); padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0;">Product Description Updated</h1>
-      </div>
-      <div style="padding: 20px; background: #f9f9f9;">
+  const body = `
         <p>Hello <strong>${user.fullname}</strong>,</p>
         <p>The seller has added new information to the product description:</p>
         <div style="background: white; padding: 15px; border-left: 4px solid #72AEC8; margin: 15px 0;">
@@ -92,8 +88,6 @@ function buildDescUpdateEmailHtml(user, product, description, productUrl) {
         </div>
         <p>View the product to see the full updated description:</p>
         <a href="${productUrl}" style="display: inline-block; background: #72AEC8; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; margin: 10px 0;">View Product</a>
-        <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-        <p style="color: #999; font-size: 12px;">You received this email because you placed a bid or asked a question on this product.</p>
-      </div>
-    </div>`;
+        <p style="color: #999; font-size: 12px; margin-top: 15px;">You received this email because you placed a bid or asked a question on this product.</p>`;
+  return emailLayout('Product Description Updated', body);
 }

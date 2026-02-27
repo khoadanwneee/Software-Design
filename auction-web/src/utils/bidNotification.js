@@ -7,6 +7,7 @@
 
 import * as userModel from '../models/user.model.js';
 import { sendMail } from './mailer.js';
+import { emailLayout } from './emailTemplates.js';
 
 // ============ HELPERS ============
 
@@ -20,12 +21,7 @@ function formatVND(amount) {
  * Email cho seller khi có bid mới
  */
 function buildSellerBidEmailHtml(seller, result, productUrl) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0;">New Bid Received!</h1>
-      </div>
-      <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+  const body = `
         <p>Dear <strong>${seller.fullname}</strong>,</p>
         <p>Great news! Your product has received a new bid:</p>
         <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #72AEC8;">
@@ -37,10 +33,8 @@ function buildSellerBidEmailHtml(seller, result, productUrl) {
         ${result.productSold ? `<div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 15px 0;"><p style="margin: 0; color: #155724;"><strong>🎉 Buy Now price reached!</strong> Auction has ended.</p></div>` : ''}
         <div style="text-align: center; margin: 30px 0;">
           <a href="${productUrl}" style="display: inline-block; background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Product</a>
-        </div>
-      </div>
-      <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">This is an automated message from Online Auction.</p>
-    </div>`;
+        </div>`;
+  return emailLayout('New Bid Received!', body);
 }
 
 /**
@@ -49,12 +43,8 @@ function buildSellerBidEmailHtml(seller, result, productUrl) {
 function buildBidderBidEmailHtml(bidder, result, productUrl, isWinning) {
   const color = isWinning ? '#28a745' : '#ffc107';
   const colorDark = isWinning ? '#218838' : '#e0a800';
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, ${color} 0%, ${colorDark} 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0;">${isWinning ? "You're Winning!" : 'Bid Placed'}</h1>
-      </div>
-      <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+  const title = isWinning ? "You're Winning!" : 'Bid Placed';
+  const body = `
         <p>Dear <strong>${bidder.fullname}</strong>,</p>
         <p>${isWinning ? 'Congratulations! Your bid has been placed and you are currently the highest bidder!' : 'Your bid has been placed. However, another bidder has a higher maximum bid.'}</p>
         <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid ${color};">
@@ -67,10 +57,8 @@ function buildBidderBidEmailHtml(bidder, result, productUrl, isWinning) {
         ${!isWinning ? `<div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;"><p style="margin: 0; color: #856404;"><strong>💡 Tip:</strong> Consider increasing your maximum bid to improve your chances of winning.</p></div>` : ''}
         <div style="text-align: center; margin: 30px 0;">
           <a href="${productUrl}" style="display: inline-block; background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">${result.productSold && isWinning ? 'Complete Payment' : 'View Auction'}</a>
-        </div>
-      </div>
-      <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">This is an automated message from Online Auction.</p>
-    </div>`;
+        </div>`;
+  return emailLayout(title, body, color, colorDark);
 }
 
 /**
@@ -79,12 +67,8 @@ function buildBidderBidEmailHtml(bidder, result, productUrl, isWinning) {
 function buildPreviousBidderEmailHtml(prevBidder, result, productUrl, wasOutbid) {
   const color = wasOutbid ? '#dc3545' : '#ffc107';
   const colorDark = wasOutbid ? '#c82333' : '#e0a800';
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, ${color} 0%, ${colorDark} 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0;">${wasOutbid ? "You've Been Outbid!" : 'Price Updated'}</h1>
-      </div>
-      <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+  const title = wasOutbid ? "You've Been Outbid!" : 'Price Updated';
+  const body = `
         <p>Dear <strong>${prevBidder.fullname}</strong>,</p>
         ${wasOutbid ? `<p>Unfortunately, another bidder has placed a higher bid on the product you were winning:</p>` : `<p>Good news! You're still the highest bidder, but the current price has been updated due to a new bid:</p>`}
         <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid ${color};">
@@ -97,22 +81,15 @@ function buildPreviousBidderEmailHtml(prevBidder, result, productUrl, wasOutbid)
         ${wasOutbid ? `<div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;"><p style="margin: 0; color: #856404;"><strong>💡 Don't miss out!</strong> Place a new bid to regain the lead.</p></div>` : `<div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 15px 0;"><p style="margin: 0; color: #155724;"><strong>💡 Tip:</strong> Your automatic bidding is working! Consider increasing your max bid if you want more protection.</p></div>`}
         <div style="text-align: center; margin: 30px 0;">
           <a href="${productUrl}" style="display: inline-block; background: linear-gradient(135deg, ${wasOutbid ? '#28a745' : '#72AEC8'} 0%, ${wasOutbid ? '#218838' : '#5a9ab8'} 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">${wasOutbid ? 'Place New Bid' : 'View Auction'}</a>
-        </div>
-      </div>
-      <p style="color: #888; font-size: 12px; text-align: center; margin-top: 20px;">This is an automated message from Online Auction.</p>
-    </div>`;
+        </div>`;
+  return emailLayout(title, body, color, colorDark);
 }
 
 /**
  * Email khi bidder bị reject
  */
 function buildRejectBidderEmailHtml(rejectedUser, product, sellerName, homeUrl) {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0;">Bid Rejected</h1>
-      </div>
-      <div style="background-color: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+  const body = `
         <p>Dear <strong>${rejectedUser.fullname}</strong>,</p>
         <p>We regret to inform you that the seller has rejected your bid on the following product:</p>
         <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #dc3545;">
@@ -124,11 +101,8 @@ function buildRejectBidderEmailHtml(rejectedUser, product, sellerName, homeUrl) 
         <div style="text-align: center; margin: 30px 0;">
           <a href="${homeUrl}" style="display: inline-block; background: linear-gradient(135deg, #72AEC8 0%, #5a9ab8 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Browse Other Auctions</a>
         </div>
-        <p style="color: #888; font-size: 13px;">If you believe this was done in error, please contact our support team.</p>
-      </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="color: #888; font-size: 12px; text-align: center;">This is an automated message from Online Auction. Please do not reply to this email.</p>
-    </div>`;
+        <p style="color: #888; font-size: 13px;">If you believe this was done in error, please contact our support team.</p>`;
+  return emailLayout('Bid Rejected', body, '#dc3545', '#c82333');
 }
 
 // ============ SENDING FUNCTIONS ============
