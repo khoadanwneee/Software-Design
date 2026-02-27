@@ -1,8 +1,8 @@
-import * as systemSettingModel from '../../models/systemSetting.model.js';
+import * as systemSettingService from '../../services/systemSetting.service.js';
 
 export const getSettings = async (req, res) => {
     try {
-        const settingsArray = await systemSettingModel.getAllSettings();
+        const settingsArray = await systemSettingService.getAllSettings();
         const settings = {
             new_product_limit_minutes: 60,
             auto_extend_trigger_minutes: 5,
@@ -36,14 +36,14 @@ export const postSettings = async (req, res) => {
     try {
         const { new_product_limit_minutes, auto_extend_trigger_minutes, auto_extend_duration_minutes } = req.body;
         
-        await systemSettingModel.updateSetting('new_product_limit_minutes', new_product_limit_minutes);
-        await systemSettingModel.updateSetting('auto_extend_trigger_minutes', auto_extend_trigger_minutes);
-        await systemSettingModel.updateSetting('auto_extend_duration_minutes', auto_extend_duration_minutes);
+        await systemSettingService.updateSetting('new_product_limit_minutes', new_product_limit_minutes);
+        await systemSettingService.updateSetting('auto_extend_trigger_minutes', auto_extend_trigger_minutes);
+        await systemSettingService.updateSetting('auto_extend_duration_minutes', auto_extend_duration_minutes);
         
         res.redirect('/admin/system/settings?success=Settings updated successfully');
     } catch (error) {
         console.error('Error updating settings:', error);
-        const settingsArray = await systemSettingModel.getAllSettings();
+        const settingsArray = await systemSettingService.getAllSettings();
         const settings = {
             new_product_limit_minutes: 60,
             auto_extend_trigger_minutes: 5,

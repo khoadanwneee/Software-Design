@@ -1,13 +1,11 @@
-import * as productModel from '../models/product.model.js';
-import * as userModel from '../models/user.model.js';
-import * as watchListModel from '../models/watchlist.model.js';
-import * as biddingHistoryModel from '../models/biddingHistory.model.js';
 import * as categoryService from '../services/category.service.js';
 import * as productService from '../services/product.service.js';
 import * as orderService from '../services/order.service.js';
 import * as ratingService from '../services/rating.service.js';
 import * as biddingService from '../services/bidding.service.js';
 import * as commentService from '../services/comment.service.js';
+import * as userService from '../services/user.service.js';
+import * as watchlistService from '../services/watchlist.service.js';
 
 
 
@@ -102,13 +100,13 @@ export const getBiddingHistory = async (req, res) => {
   }
 
   try {
-    const product = await productModel.findByProductId2(productId, null);
+    const product = await productService.getProduct(productId, null);
     
     if (!product) {
       return res.status(404).render('404', { message: 'Product not found' });
     }
 
-    const biddingHistory = await biddingHistoryModel.getBiddingHistory(productId);
+    const biddingHistory = await biddingService.getBiddingHistory(productId);
     
     res.render('vwProduct/biddingHistory', { 
       product,
@@ -124,9 +122,9 @@ export const postWatchlist = async (req, res) => {
   const userId = req.session.authUser.id;
   const productId = req.body.productId;
 
-  const isInWatchlist = await watchListModel.isInWatchlist(userId, productId);
+  const isInWatchlist = await watchlistService.isInWatchlist(userId, productId);
   if (!isInWatchlist) {
-    await watchListModel.addToWatchlist(userId, productId);
+    await watchlistService.addToWatchlist(userId, productId);
   }
 
   const retUrl = req.headers.referer || '/';
@@ -137,7 +135,7 @@ export const deleteWatchlist = async (req, res) => {
   const userId = req.session.authUser.id;
   const productId = req.body.productId;
 
-  await watchListModel.removeFromWatchlist(userId, productId);
+  await watchlistService.removeFromWatchlist(userId, productId);
 
   const retUrl = req.headers.referer || '/';
   res.redirect(retUrl);
@@ -199,7 +197,7 @@ export const getCompleteOrder = async (req, res) => {
     return res.redirect('/');
   }
   
-  const product = await productModel.findByProductId2(productId, userId);
+  const product = await productService.getProduct(productId, userId);
   
   if (!product) {
     return res.status(404).render('404', { message: 'Product not found' });
@@ -468,7 +466,7 @@ export function createGetUserRatings(role) {
         return res.redirect('/');
       }
 
-      const user = await userModel.findById(userId);
+      const user = await userService.findById(userId);
       if (!user) {
         return res.redirect('/');
       }

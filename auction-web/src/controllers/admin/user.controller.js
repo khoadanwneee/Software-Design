@@ -1,10 +1,10 @@
 import bcrypt from 'bcryptjs';
-import * as upgradeRequestModel from '../../models/upgradeRequest.model.js';
-import * as userModel from '../../models/user.model.js';
+import * as upgradeRequestService from '../../services/upgradeRequest.service.js';
+import * as userService from '../../services/user.service.js';
 import { sendMail } from '../../utils/mailer.js';
 
 export const getList = async (req, res) => {
-    const users = await userModel.loadAllUsers();
+    const users = await userService.loadAllUsers();
     
     res.render('vwAdmin/users/list', { 
         users,
@@ -38,7 +38,7 @@ export const postAdd = async (req, res) => {
             updated_at: new Date()
         };
         
-        await userModel.add(newUser);
+        await userService.add(newUser);
         req.session.success_message = 'User added successfully!';
         res.redirect('/admin/users/list');
     } catch (error) {
@@ -68,7 +68,7 @@ export const postEdit = async (req, res) => {
             updated_at: new Date()
         };
         
-        await userModel.update(id, updateData);
+        await userService.update(id, updateData);
         req.session.success_message = 'User updated successfully!';
         res.redirect('/admin/users/list');
     } catch (error) {
@@ -84,9 +84,9 @@ export const postResetPassword = async (req, res) => {
         const defaultPassword = '123';
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
         
-        const user = await userModel.findById(id);
+        const user = await userService.findById(id);
         
-        await userModel.update(id, { 
+        await userService.update(id, { 
             password_hash: hashedPassword,
             updated_at: new Date()
         });
@@ -130,7 +130,7 @@ export const postResetPassword = async (req, res) => {
 export const postDelete = async (req, res) => {
     try {
         const { id } = req.body;
-        await userModel.deleteUser(id);
+        await userService.deleteUser(id);
         req.session.success_message = 'User deleted successfully!';
         res.redirect('/admin/users/list');
     } catch (error) {
@@ -141,21 +141,21 @@ export const postDelete = async (req, res) => {
 };
 
 export const getUpgradeRequests = async (req, res) => {
-    const requests = await upgradeRequestModel.loadAllUpgradeRequests();
+    const requests = await upgradeRequestService.loadAllUpgradeRequests();
     res.render('vwAdmin/users/upgradeRequests', { requests });
 };
 
 export const postApproveUpgrade = async (req, res) => {
     const id = req.body.id;
     const bidderId = req.body.bidder_id;
-    await upgradeRequestModel.approveUpgradeRequest(id);
-    await userModel.updateUserRoleToSeller(bidderId);
+    await upgradeRequestService.approveUpgradeRequest(id);
+    await userService.updateUserRoleToSeller(bidderId);
     res.redirect('/admin/users/upgrade-requests');
 };
 
 export const postRejectUpgrade = async (req, res) => {
     const id = req.body.id;
     const admin_note = req.body.admin_note;
-    await upgradeRequestModel.rejectUpgradeRequest(id, admin_note);
+    await upgradeRequestService.rejectUpgradeRequest(id, admin_note);
     res.redirect('/admin/users/upgrade-requests');
 };

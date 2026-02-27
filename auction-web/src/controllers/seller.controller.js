@@ -1,10 +1,8 @@
-import * as productModel from '../models/product.model.js';
-import * as reviewModel from '../models/review.model.js';
-import * as productDescUpdateModel from '../models/productDescriptionUpdate.model.js';
 import { buildProductData, createProductWithImages } from '../services/product.service.js';
 import * as productService from '../services/product.service.js';
 import * as ratingService from '../services/rating.service.js';
 import * as productDescriptionService from '../services/productDescription.service.js';
+import * as userService from '../services/user.service.js';
 
 export const getDashboard = async (req, res) => {
     const sellerId = req.session.authUser.id;
@@ -14,21 +12,21 @@ export const getDashboard = async (req, res) => {
 
 export const getAllProducts = async (req, res) => {
     const sellerId = req.session.authUser.id;
-    const products = await productModel.findAllProductsBySellerId(sellerId);
+    const products = await productService.getAllProductsBySellerId(sellerId);
     res.render('vwSeller/all-products', { products });
 };
 
 export const getActiveProducts = async (req, res) => {
     const sellerId = req.session.authUser.id;
-    const products = await productModel.findActiveProductsBySellerId(sellerId);
+    const products = await productService.getActiveProductsBySellerId(sellerId);
     res.render('vwSeller/active', { products });
 };
 
 export const getPendingProducts = async (req, res) => {
     const sellerId = req.session.authUser.id;
     const [products, stats] = await Promise.all([
-        productModel.findPendingProductsBySellerId(sellerId),
-        productModel.getPendingProductsStats(sellerId)
+        productService.getPendingProductsBySellerId(sellerId),
+        productService.getPendingProductsStats(sellerId)
     ]);
     
     let success_message = '';
@@ -42,8 +40,8 @@ export const getPendingProducts = async (req, res) => {
 export const getSoldProducts = async (req, res) => {
     const sellerId = req.session.authUser.id;
     const [products, stats] = await Promise.all([
-        productModel.findSoldProductsBySellerId(sellerId),
-        productModel.getSoldProductsStats(sellerId)
+        productService.getSoldProductsBySellerId(sellerId),
+        productService.getSoldProductsStats(sellerId)
     ]);
     
     const productsWithReview = await Promise.all(products.map(async (product) => {
@@ -64,11 +62,11 @@ export const getSoldProducts = async (req, res) => {
 
 export const getExpiredProducts = async (req, res) => {
     const sellerId = req.session.authUser.id;
-    const products = await productModel.findExpiredProductsBySellerId(sellerId);
+    const products = await productService.getExpiredProductsBySellerId(sellerId);
     
     for (let product of products) {
         if (product.status === 'Cancelled' && product.highest_bidder_id) {
-            const review = await reviewModel.getProductReview(sellerId, product.highest_bidder_id, product.id);
+            const review = await ratingService.getProductReview(sellerId, product.highest_bidder_id, product.id);
             const hasActualReview = review && review.rating !== 0;
             
             product.hasReview = hasActualReview;
@@ -191,7 +189,7 @@ export const getDescriptionUpdates = async (req, res) => {
         const productId = req.params.id;
         const sellerId = req.session.authUser.id;
         
-        const product = await productModel.findByProductId2(productId, null);
+        const product = await productService.getProduct(productId, null);
         if (!product) {
             return res.status(404).json({ success: false, message: 'Product not found' });
         }
@@ -200,7 +198,7 @@ export const getDescriptionUpdates = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Unauthorized' });
         }
         
-        const updates = await productDescUpdateModel.findByProductId(productId);
+        const updates = await productDescriptionService.getDescriptionUpdates(productId);
         
         res.json({ success: true, updates });
     } catch (error) {
@@ -219,17 +217,17 @@ export const putDescriptionUpdate = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Content is required' });
         }
         
-        const update = await productDescUpdateModel.findById(updateId);
+        const update = await productDescriptionService.getUpdateById(updateId);
         if (!update) {
             return res.status(404).json({ success: false, message: 'Update not found' });
         }
         
-        const product = await productModel.findByProductId2(update.product_id, null);
+        const product = await productService.getProduct(update.product_id, null);
         if (!product || product.seller_id !== sellerId) {
             return res.status(403).json({ success: false, message: 'Unauthorized' });
         }
         
-        await productDescUpdateModel.updateContent(updateId, content.trim());
+        await productDescriptionService.updateContent(updateId, content.trim());
         
         res.json({ success: true, message: 'Update saved successfully' });
     } catch (error) {
@@ -243,17 +241,17 @@ export const deleteDescriptionUpdate = async (req, res) => {
         const updateId = req.params.updateId;
         const sellerId = req.session.authUser.id;
         
-        const update = await productDescUpdateModel.findById(updateId);
+        const update = await productDescriptionService.getUpdateById(updateId);
         if (!update) {
             return res.status(404).json({ success: false, message: 'Update not found' });
         }
         
-        const product = await productModel.findByProductId2(update.product_id, null);
+        const product = await productService.getProduct(update.product_id, null);
         if (!product || product.seller_id !== sellerId) {
             return res.status(403).json({ success: false, message: 'Unauthorized' });
         }
         
-        await productDescUpdateModel.deleteUpdate(updateId);
+        await productDescriptionService.deleteUpdate(updateId);
         
         res.json({ success: true, message: 'Update deleted successfully' });
     } catch (error) {

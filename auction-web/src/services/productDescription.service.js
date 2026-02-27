@@ -17,6 +17,19 @@ export async function getDescriptionUpdates(productId) {
   return productDescUpdateModel.findByProductId(productId);
 }
 
+// additional wrappers to hide model access from controllers
+export async function getUpdateById(updateId) {
+  return productDescUpdateModel.findById(updateId);
+}
+
+export async function updateContent(updateId, content) {
+  return productDescUpdateModel.updateContent(updateId, content);
+}
+
+export async function deleteUpdate(updateId) {
+  return productDescUpdateModel.deleteUpdate(updateId);
+}
+
 /**
  * Thêm mô tả mới cho sản phẩm + gửi email thông báo cho bidders/commenters
  */
