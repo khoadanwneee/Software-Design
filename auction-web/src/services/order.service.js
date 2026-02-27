@@ -3,6 +3,7 @@ import * as invoiceModel from '../models/invoice.model.js';
 import * as orderChatModel from '../models/orderChat.model.js';
 import * as reviewModel from '../models/review.model.js';
 import * as productModel from '../models/product.model.js';
+import * as ratingService from './rating.service.js';
 import db from '../utils/db.js';
 
 /**
@@ -210,30 +211,9 @@ export async function submitRating(orderId, userId, { rating, comment }) {
   const order = await getOrderWithAuth(orderId, userId);
 
   const isBuyer = order.buyer_id === userId;
-  const reviewerId = userId;
   const revieweeId = isBuyer ? order.seller_id : order.buyer_id;
 
-  const ratingValue = rating === 'positive' ? 1 : -1;
-
-  const existingReview = await reviewModel.findByReviewerAndProduct(
-    reviewerId,
-    order.product_id
-  );
-
-  if (existingReview) {
-    await reviewModel.updateByReviewerAndProduct(reviewerId, order.product_id, {
-      rating: ratingValue,
-      comment: comment || null,
-    });
-  } else {
-    await reviewModel.create({
-      reviewer_id: reviewerId,
-      reviewed_user_id: revieweeId,
-      product_id: order.product_id,
-      rating: ratingValue,
-      comment: comment || null,
-    });
-  }
+  await ratingService.createOrUpdateReview(userId, revieweeId, order.product_id, rating, comment);
 
   await checkAndCompleteOrder(orderId, userId);
 }
@@ -245,24 +225,9 @@ export async function completeTransaction(orderId, userId) {
   const order = await getOrderWithAuth(orderId, userId);
 
   const isBuyer = order.buyer_id === userId;
-  const reviewerId = userId;
   const revieweeId = isBuyer ? order.seller_id : order.buyer_id;
 
-  // Tạo review với rating=0 (skip rating)
-  const existingReview = await reviewModel.findByReviewerAndProduct(
-    reviewerId,
-    order.product_id
-  );
-
-  if (!existingReview) {
-    await reviewModel.create({
-      reviewer_id: reviewerId,
-      reviewed_user_id: revieweeId,
-      product_id: order.product_id,
-      rating: 0,
-      comment: null,
-    });
-  }
+  await ratingService.createSkipReview(userId, revieweeId, order.product_id);
 
   await checkAndCompleteOrder(orderId, userId);
 }

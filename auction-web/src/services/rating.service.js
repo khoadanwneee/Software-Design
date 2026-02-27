@@ -100,3 +100,23 @@ export function getProductReview(reviewerId, revieweeId, productId) {
 export function findByReviewerAndProduct(reviewerId, productId) {
   return reviewModel.findByReviewerAndProduct(reviewerId, productId);
 }
+/**
+ * Tạo review với rating=0 (skip rating) — chỉ tạo nếu chưa tồn tại
+ * Dùng khi user chọn "complete transaction" mà không đánh giá
+ */
+export async function createSkipReview(reviewerId, revieweeId, productId) {
+  const existingReview = await reviewModel.findByReviewerAndProduct(
+    reviewerId,
+    productId
+  );
+
+  if (!existingReview) {
+    await reviewModel.create({
+      reviewer_id: reviewerId,
+      reviewed_user_id: revieweeId,
+      product_id: productId,
+      rating: 0,
+      comment: null,
+    });
+  }
+}
