@@ -89,10 +89,22 @@ export async function submitOrderRating(orderId, userId, rating, comment, order)
   await createOrUpdateReview(reviewerId, revieweeId, order.product_id, rating, comment);
 }
 
+// ------------------------------------------------------------------
+// direct review access wrappers
+// ------------------------------------------------------------------
+
+export function getProductReview(reviewerId, revieweeId, productId) {
+  return reviewModel.getProductReview(reviewerId, revieweeId, productId);
+}
+
+export function findByReviewerAndProduct(reviewerId, productId) {
+  return reviewModel.findByReviewerAndProduct(reviewerId, productId);
+}
 /**
  * Tạo review với rating=0 (skip rating) — chỉ tạo nếu chưa tồn tại
  * Dùng khi user chọn "complete transaction" mà không đánh giá
  */
+
 export async function createSkipReview(reviewerId, revieweeId, productId) {
   const existingReview = await reviewModel.findByReviewerAndProduct(
     reviewerId,

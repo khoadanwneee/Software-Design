@@ -1,11 +1,10 @@
 import bcrypt from 'bcryptjs';
-import * as userModel from '../models/user.model.js';
-import * as upgradeRequestModel from '../models/upgradeRequest.model.js';
-import * as watchlistModel from '../models/watchlist.model.js';
-import * as reviewModel from '../models/review.model.js';
-import * as autoBiddingModel from '../models/autoBidding.model.js';
-import { generateAndSendOtp } from '../services/otp.service.js';
+import * as userService from '../services/user.service.js';
+import * as upgradeRequestService from '../services/upgradeRequest.service.js';
+import * as watchlistService from '../services/watchlist.service.js';
 import * as ratingService from '../services/rating.service.js';
+import * as biddingService from '../services/bidding.service.js';
+import { generateAndSendOtp } from '../services/otp.service.js';
 
 export const getRatings = async (req, res) => {
   const currentUserId = req.session.authUser.id;
@@ -48,7 +47,7 @@ export const getForgotPassword = (req, res) => {
 
 export const postForgotPassword = async (req, res) => {
   const { email } = req.body;
-  const user = await userModel.findByEmail(email);
+  const user = await userService.findByEmail(email);
   if (!user) {
     return res.render('vwAccount/auth/forgot-password', {
       error_message: 'Email not found.',
@@ -67,8 +66,8 @@ export const postForgotPassword = async (req, res) => {
 
 export const postVerifyForgotPasswordOtp = async (req, res) => {
     const { email, otp } = req.body;
-    const user = await userModel.findByEmail(email);
-    const otpRecord = await userModel.findValidOtp({
+    const user = await userService.findByEmail(email);
+    const otpRecord = await userService.findValidOtp({
       user_id: user.id,
       otp_code: otp,
       purpose: 'reset_password',
@@ -81,13 +80,13 @@ export const postVerifyForgotPasswordOtp = async (req, res) => {
         error_message: 'Invalid or expired OTP.',
       });
     }
-    await userModel.markOtpUsed(otpRecord.id);
+    await userService.markOtpUsed(otpRecord.id);
     return res.render('vwAccount/auth/reset-password', { email });
 };
 
 export const postResendForgotPasswordOtp = async (req, res) => {
   const { email } = req.body;
-  const user = await userModel.findByEmail(email);
+  const user = await userService.findByEmail(email);
   if (!user) {
     return res.render('vwAccount/auth/verify-forgot-password-otp', {
       email,
@@ -114,7 +113,7 @@ export const postResetPassword = async (req, res) => {
       error_message: 'Passwords do not match.',
     });
   }
-  const user = await userModel.findByEmail(email);
+  const user = await userService.findByEmail(email);
   if (!user) {
     return res.render('vwAccount/auth/reset-password', {
       email,
@@ -122,7 +121,7 @@ export const postResetPassword = async (req, res) => {
     });
   }
   const hashedPassword = bcrypt.hashSync(new_password, 10);
-  await userModel.update(user.id, { password_hash: hashedPassword });
+  await userService.update(user.id, { password_hash: hashedPassword });
   return res.render('vwAccount/auth/signin', {
     success_message: 'Your password has been reset. You can sign in now.',
   });
@@ -131,7 +130,7 @@ export const postResetPassword = async (req, res) => {
 export const postSignin = async (req, res) => {
   const { email, password } = req.body;
 
-  const user = await userModel.findByEmail(email);
+  const user = await userService.findByEmail(email);
   if (!user) {
     return res.render('vwAccount/auth/signin', {
       error_message: 'Invalid email or password',
@@ -198,7 +197,7 @@ export const postSignup = async (req, res) => {
   if (!address) errors.address = 'Address is required';
   if (!email) errors.email = 'Email is required';
 
-  const isEmailExist = await userModel.findByEmail(email);
+  const isEmailExist = await userService.findByEmail(email);
   if (isEmailExist) errors.email = 'Email is already in use';
 
   if (!password) errors.password = 'Password is required';
@@ -223,7 +222,7 @@ export const postSignup = async (req, res) => {
     role: 'bidder',
   };
 
-  const newUser = await userModel.add(user);
+  const newUser = await userService.add(user);
 
   const verifyUrl = `${process.env.APP_BASE_URL}/account/verify-email?email=${encodeURIComponent(
     email
@@ -248,7 +247,7 @@ export const postSignup = async (req, res) => {
 export const postVerifyEmail = async (req, res) => {
   const { email, otp } = req.body;
 
-  const user = await userModel.findByEmail(email);
+  const user = await userService.findByEmail(email);
   if (!user) {
     return res.render('vwAccount/verify-otp', {
       email,
@@ -256,7 +255,7 @@ export const postVerifyEmail = async (req, res) => {
     });
   }
 
-  const otpRecord = await userModel.findValidOtp({
+  const otpRecord = await userService.findValidOtp({
     user_id: user.id,
     otp_code: otp,
     purpose: 'verify_email',
@@ -269,8 +268,8 @@ export const postVerifyEmail = async (req, res) => {
     });
   }
 
-  await userModel.markOtpUsed(otpRecord.id);
-  await userModel.verifyUserEmail(user.id);
+  await userService.markOtpUsed(otpRecord.id);
+  await userService.verifyUserEmail(user.id);
 
   req.session.success_message =
     'Your email has been verified. You can sign in now.';
@@ -280,7 +279,7 @@ export const postVerifyEmail = async (req, res) => {
 export const postResendOtp = async (req, res) => {
   const { email } = req.body;
 
-  const user = await userModel.findByEmail(email);
+  const user = await userService.findByEmail(email);
   if (!user) {
     return res.render('vwAccount/auth/verify-otp', {
       email,
@@ -310,7 +309,7 @@ export const postResendOtp = async (req, res) => {
 export const getProfile = async (req, res) => {
   try {
     const currentUserId = req.session.authUser.id;
-    const user = await userModel.findById(currentUserId);
+    const user = await userService.findById(currentUserId);
 
     let success_message = null;
     if (req.query.success === 'true') {
@@ -338,7 +337,7 @@ export const putProfile = async (req, res) => {
     const { email, fullname, address, date_of_birth, old_password, new_password, confirm_new_password } = req.body;
     const currentUserId = req.session.authUser.id;
 
-    const currentUser = await userModel.findById(currentUserId);
+    const currentUser = await userService.findById(currentUserId);
 
     if (!currentUser.oauth_provider) {
       if (!old_password || !bcrypt.compareSync(old_password, currentUser.password_hash)) {
@@ -350,7 +349,7 @@ export const putProfile = async (req, res) => {
     }
 
     if (email !== currentUser.email) {
-      const existingUser = await userModel.findByEmail(email);
+      const existingUser = await userService.findByEmail(email);
       if (existingUser) {
         return res.render('vwAccount/profile', {
           user: currentUser,
@@ -381,7 +380,7 @@ export const putProfile = async (req, res) => {
         : currentUser.password_hash;
     }
 
-    const updatedUser = await userModel.update(currentUserId, entity);
+    const updatedUser = await userService.update(currentUserId, entity);
     console.log('Updated user result:', updatedUser);
 
     if (updatedUser) {
@@ -409,15 +408,15 @@ export const postLogout = (req, res) => {
 
 export const getRequestUpgrade = async (req, res) => {
   const currentUserId = req.session.authUser.id;
-  const upgradeRequest = await upgradeRequestModel.findByUserId(currentUserId);
+  const upgradeRequest = await upgradeRequestService.findByUserId(currentUserId);
   res.render('vwAccount/request-upgrade', { upgrade_request: upgradeRequest });
 };
 
 export const postRequestUpgrade = async (req, res) => {
   try {
     const currentUserId = req.session.authUser.id;
-    await userModel.markUpgradePending(currentUserId);
-    await upgradeRequestModel.createUpgradeRequest(currentUserId);
+    await userService.markUpgradePending(currentUserId);
+    await upgradeRequestService.createUpgradeRequest(currentUserId);
     return res.redirect('/account/profile?send-request-upgrade=true');
   } catch (err) {
     console.error(err);
@@ -433,8 +432,8 @@ export const getWatchlist = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const offset = (page - 1) * limit;
   const currentUserId = req.session.authUser.id;
-  const watchlistProducts = await watchlistModel.searchPageByUserId(currentUserId, limit, offset);
-  const total = await watchlistModel.countByUserId(currentUserId);
+  const watchlistProducts = await watchlistService.searchPageByUserId(currentUserId, limit, offset);
+  const total = await watchlistService.countByUserId(currentUserId);
   const totalCount = Number(total.count);
   const nPages = Math.ceil(totalCount / limit);
   let from = (page - 1) * limit + 1;
@@ -453,7 +452,7 @@ export const getWatchlist = async (req, res) => {
 
 export const getBidding = async (req, res) => {
   const currentUserId = req.session.authUser.id;
-  const biddingProducts = await autoBiddingModel.getBiddingProductsByBidderId(currentUserId);
+  const biddingProducts = await biddingService.getBiddingProductsByBidderId(currentUserId);
   
   res.render('vwAccount/bidding-products', {
     activeSection: 'bidding',
@@ -463,10 +462,10 @@ export const getBidding = async (req, res) => {
 
 export const getAuctions = async (req, res) => {
   const currentUserId = req.session.authUser.id;
-  const wonAuctions = await autoBiddingModel.getWonAuctionsByBidderId(currentUserId);
+  const wonAuctions = await biddingService.getWonAuctionsByBidderId(currentUserId);
   
   for (let product of wonAuctions) {
-    const review = await reviewModel.findByReviewerAndProduct(currentUserId, product.id);
+    const review = await ratingService.findByReviewerAndProduct(currentUserId, product.id);
     if (review && review.rating !== 0) {
       product.has_rated_seller = true;
       product.seller_rating = review.rating === 1 ? 'positive' : 'negative';

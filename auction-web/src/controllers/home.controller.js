@@ -1,11 +1,11 @@
-import * as productModel from '../models/product.model.js';
+import * as productService from '../services/product.service.js';
 
 export const getHome = async (req, res) => {
   try {
     const [topEnding, topBids, topPrice] = await Promise.all([
-      productModel.findTopEnding(),
-      productModel.findTopBids(),
-      productModel.findTopPrice()
+      productService.getTopEnding(),
+      productService.getTopBids(),
+      productService.getTopPrice()
     ]);
     res.render('home', { 
       topEndingProducts: topEnding, 

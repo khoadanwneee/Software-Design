@@ -430,6 +430,65 @@ export async function cancelProduct(productId, sellerId) {
   return product;
 }
 
+// ------------------------------------------------------------------
+// Convenience wrappers around product.model for controllers
+// ------------------------------------------------------------------
+
+export function getTopEnding() {
+  return productModel.findTopEnding();
+}
+
+export function getTopBids() {
+  return productModel.findTopBids();
+}
+
+export function getTopPrice() {
+  return productModel.findTopPrice();
+}
+
+export function findAll() {
+  return productModel.findAll();
+}
+
+export function findByProductIdForAdmin(id) {
+  return productModel.findByProductIdForAdmin(id);
+}
+
+export function getAllProductsBySellerId(sellerId) {
+  return productModel.findAllProductsBySellerId(sellerId);
+}
+
+export function getActiveProductsBySellerId(sellerId) {
+  return productModel.findActiveProductsBySellerId(sellerId);
+}
+
+export function getPendingProductsBySellerId(sellerId) {
+  return productModel.findPendingProductsBySellerId(sellerId);
+}
+
+export function getPendingProductsStats(sellerId) {
+  return productModel.getPendingProductsStats(sellerId);
+}
+
+export function getSoldProductsBySellerId(sellerId) {
+  return productModel.findSoldProductsBySellerId(sellerId);
+}
+
+export function getSoldProductsStats(sellerId) {
+  return productModel.getSoldProductsStats(sellerId);
+}
+
+export function getExpiredProductsBySellerId(sellerId) {
+  return productModel.findExpiredProductsBySellerId(sellerId);
+}
+
+export function updateProduct(id, data) {
+  return productModel.updateProduct(id, data);
+}
+
+export function deleteProduct(id) {
+  return productModel.deleteProduct(id);
+}
 
 // ============================================================
 // TEXT NORMALIZE HELPER (extracted from duplicate in product.model.js)

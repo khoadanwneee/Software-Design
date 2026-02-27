@@ -1,9 +1,9 @@
-import * as productModel from '../../models/product.model.js';
-import * as userModel from '../../models/user.model.js';
+import * as productService from '../../services/product.service.js';
+import * as userService from '../../services/user.service.js';
 import { buildProductData, createProductWithImages } from '../../services/product.service.js';
 
 export const getList = async (req, res) => {
-    const products = await productModel.findAll();
+    const products = await productService.findAll();
     const filteredProducts = products.map(p => ({
         id: p.id,
         name: p.name,
@@ -19,7 +19,7 @@ export const getList = async (req, res) => {
 
 export const getAdd = async (req, res) => {
     try {
-        const sellers = await userModel.findUsersByRole('seller');
+        const sellers = await userService.findUsersByRole('seller');
         res.render('vwAdmin/product/add', { sellers });
     } catch (error) {
         console.error('Error loading sellers:', error);
@@ -41,27 +41,27 @@ export const postAdd = async (req, res) => {
 
 export const getDetail = async (req, res) => {
     const id = req.params.id;
-    const product = await productModel.findByProductIdForAdmin(id);
+    const product = await productService.findByProductIdForAdmin(id);
     res.render('vwAdmin/product/detail', { product } );
 };
 
 export const getEdit = async (req, res) => {
     const id = req.params.id;
-    const product = await productModel.findByProductIdForAdmin(id);
-    const sellers = await userModel.findUsersByRole('seller');
+    const product = await productService.findByProductIdForAdmin(id);
+    const sellers = await userService.findUsersByRole('seller');
     res.render('vwAdmin/product/edit', { product, sellers } );
 };
 
 export const postEdit = async (req, res) => {
     const newProduct = req.body;
-    await productModel.updateProduct(newProduct.id, newProduct);
+    await productService.updateProduct(newProduct.id, newProduct);
     req.session.success_message = 'Product updated successfully!';
     res.redirect('/admin/products/list');
 };
 
 export const postDelete = async (req, res) => {
     const { id } = req.body;
-    await productModel.deleteProduct(id);
+    await productService.deleteProduct(id);
     req.session.success_message = 'Product deleted successfully!';
     res.redirect('/admin/products/list');
 };

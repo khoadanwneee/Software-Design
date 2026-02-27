@@ -28,6 +28,37 @@ export async function getCategoryWithResolvedIds(categoryId) {
   };
 }
 
+// ------------------------------------------------------------------
+// additional wrappers for controller/service separation
+// ------------------------------------------------------------------
+
+export function findAll() {
+  return categoryModel.findAll();
+}
+
+export function findByCategoryId(id) {
+  return categoryModel.findByCategoryId(id);
+}
+
+export function findLevel1Categories() {
+  return categoryModel.findLevel1Categories();
+}
+
+export function createCategory(data) {
+  return categoryModel.createCategory(data);
+}
+
+export function updateCategory(id, data) {
+  return categoryModel.updateCategory(id, data);
+}
+
+export function isCategoryHasProducts(id) {
+  return categoryModel.isCategoryHasProducts(id);
+}
+
+export function deleteCategory(id) {
+  return categoryModel.deleteCategory(id);
+}
 
 
 

@@ -1,4 +1,5 @@
 import * as biddingHistoryModel from '../models/biddingHistory.model.js';
+import * as autoBiddingModel from '../models/autoBidding.model.js';
 import * as reviewModel from '../models/review.model.js';
 import * as systemSettingModel from '../models/systemSetting.model.js';
 import db from '../utils/db.js';
@@ -17,6 +18,15 @@ import { sendBidNotificationEmails, sendRejectBidderEmail } from '../utils/bidNo
 
 export async function getBiddingHistory(productId) {
   return biddingHistoryModel.getBiddingHistory(productId);
+}
+
+// simple passthroughs to autoBidding model
+export function getBiddingProductsByBidderId(bidderId) {
+  return autoBiddingModel.getBiddingProductsByBidderId(bidderId);
+}
+
+export function getWonAuctionsByBidderId(bidderId) {
+  return autoBiddingModel.getWonAuctionsByBidderId(bidderId);
 }
 
 // ============ VALIDATION HELPERS ============
