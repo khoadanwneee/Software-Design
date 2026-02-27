@@ -126,7 +126,10 @@ export const postCancelProduct = async (req, res) => {
     }
 };
 
-export const postRateBidder = async (req, res) => {
+/**
+ * Shared handler cho POST/PUT rate bidder — chỉ khác success message
+ */
+async function handleBidderRating(req, res, successMessage) {
     try {
         const productId = req.params.id;
         const sellerId = req.session.authUser.id;
@@ -138,31 +141,16 @@ export const postRateBidder = async (req, res) => {
         
         await ratingService.createOrUpdateReview(sellerId, highest_bidder_id, productId, rating, comment);
         
-        res.json({ success: true, message: 'Rating submitted successfully' });
+        res.json({ success: true, message: successMessage });
     } catch (error) {
         console.error('Rate bidder error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
-};
+}
 
-export const putRateBidder = async (req, res) => {
-    try {
-        const productId = req.params.id;
-        const sellerId = req.session.authUser.id;
-        const { rating, comment, highest_bidder_id } = req.body;
-        
-        if (!highest_bidder_id) {
-            return res.status(400).json({ success: false, message: 'No bidder to rate' });
-        }
-        
-        await ratingService.createOrUpdateReview(sellerId, highest_bidder_id, productId, rating, comment);
-        
-        res.json({ success: true, message: 'Rating updated successfully' });
-    } catch (error) {
-        console.error('Update rating error:', error);
-        res.status(500).json({ success: false, message: 'Server error' });
-    }
-};
+export const postRateBidder = (req, res) => handleBidderRating(req, res, 'Rating submitted successfully');
+
+export const putRateBidder = (req, res) => handleBidderRating(req, res, 'Rating updated successfully');
 
 export const postAppendDescription = async (req, res) => {
     try {
