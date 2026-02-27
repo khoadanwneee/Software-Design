@@ -482,35 +482,28 @@ export const getAuctions = async (req, res) => {
   });
 };
 
-export const postRateSeller = async (req, res) => {
+/**
+ * Shared handler cho POST/PUT rate seller
+ * POST gửi seller_id trong body, PUT thì không (dùng existing review)
+ */
+async function handleSellerRating(req, res) {
   try {
     const currentUserId = req.session.authUser.id;
     const productId = req.params.productId;
     const { seller_id, rating, comment } = req.body;
     
-    await ratingService.createOrUpdateReview(currentUserId, seller_id, productId, rating, comment);
+    await ratingService.createOrUpdateReview(currentUserId, seller_id || null, productId, rating, comment);
     
     res.json({ success: true });
   } catch (error) {
     console.error('Error rating seller:', error);
     res.json({ success: false, message: 'Failed to submit rating.' });
   }
-};
+}
 
-export const putRateSeller = async (req, res) => {
-  try {
-    const currentUserId = req.session.authUser.id;
-    const productId = req.params.productId;
-    const { rating, comment } = req.body;
-    
-    await ratingService.createOrUpdateReview(currentUserId, null, productId, rating, comment);
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error updating rating:', error);
-    res.json({ success: false, message: 'Failed to update rating.' });
-  }
-};
+export const postRateSeller = handleSellerRating;
+
+export const putRateSeller = handleSellerRating;
 
 export const getSellerProducts = async (req, res) => {
   res.render('vwAccount/my-products');

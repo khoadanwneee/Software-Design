@@ -64,15 +64,14 @@ export async function findByProductId(productId) {
 }
 
 /**
- * Lấy order kèm thông tin đầy đủ (product, buyer, seller)
+ * Base query cho order details — dùng chung cho findByIdWithDetails và findByProductIdWithDetails
  */
-export async function findByIdWithDetails(orderId) {
+function buildOrderDetailsQuery() {
   return db('orders')
     .leftJoin('products', 'orders.product_id', 'products.id')
     .leftJoin('users as buyer', 'orders.buyer_id', 'buyer.id')
     .leftJoin('users as seller', 'orders.seller_id', 'seller.id')
     .leftJoin('categories', 'products.category_id', 'categories.id')
-    .where('orders.id', orderId)
     .select(
       'orders.*',
       'products.name as product_name',
@@ -86,35 +85,21 @@ export async function findByIdWithDetails(orderId) {
       'seller.id as seller_id',
       'seller.fullname as seller_name',
       'seller.email as seller_email'
-    )
-    .first();
+    );
+}
+
+/**
+ * Lấy order kèm thông tin đầy đủ (product, buyer, seller)
+ */
+export async function findByIdWithDetails(orderId) {
+  return buildOrderDetailsQuery().where('orders.id', orderId).first();
 }
 
 /**
  * Lấy order theo product_id kèm thông tin đầy đủ
  */
 export async function findByProductIdWithDetails(productId) {
-  return db('orders')
-    .leftJoin('products', 'orders.product_id', 'products.id')
-    .leftJoin('users as buyer', 'orders.buyer_id', 'buyer.id')
-    .leftJoin('users as seller', 'orders.seller_id', 'seller.id')
-    .leftJoin('categories', 'products.category_id', 'categories.id')
-    .where('orders.product_id', productId)
-    .select(
-      'orders.*',
-      'products.name as product_name',
-      'products.thumbnail as product_thumbnail',
-      'products.end_at as product_end_at',
-      'products.closed_at as product_closed_at',
-      'categories.name as category_name',
-      'buyer.id as buyer_id',
-      'buyer.fullname as buyer_name',
-      'buyer.email as buyer_email',
-      'seller.id as seller_id',
-      'seller.fullname as seller_name',
-      'seller.email as seller_email'
-    )
-    .first();
+  return buildOrderDetailsQuery().where('orders.product_id', productId).first();
 }
 
 /**

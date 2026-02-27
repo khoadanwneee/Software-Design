@@ -88,3 +88,24 @@ export async function submitOrderRating(orderId, userId, rating, comment, order)
 
   await createOrUpdateReview(reviewerId, revieweeId, order.product_id, rating, comment);
 }
+
+/**
+ * Tạo review với rating=0 (skip rating) — chỉ tạo nếu chưa tồn tại
+ * Dùng khi user chọn "complete transaction" mà không đánh giá
+ */
+export async function createSkipReview(reviewerId, revieweeId, productId) {
+  const existingReview = await reviewModel.findByReviewerAndProduct(
+    reviewerId,
+    productId
+  );
+
+  if (!existingReview) {
+    await reviewModel.create({
+      reviewer_id: reviewerId,
+      reviewed_user_id: revieweeId,
+      product_id: productId,
+      rating: 0,
+      comment: null,
+    });
+  }
+}
