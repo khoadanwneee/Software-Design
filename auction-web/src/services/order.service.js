@@ -17,6 +17,26 @@ import db from '../utils/db.js';
  */
 
 /**
+ * Lấy order với kiểm tra quyền truy cập
+ * @param {number} orderId - ID của order
+ * @param {number} userId - ID của user đang thực hiện
+ * @param {'buyer'|'seller'|null} requiredRole - Role yêu cầu (null = buyer hoặc seller đều được)
+ * @returns {object} order object nếu authorized
+ * @throws {Error} nếu order không tồn tại hoặc user không có quyền
+ */
+async function getOrderWithAuth(orderId, userId, requiredRole = null) {
+  const order = await orderModel.findById(orderId);
+  if (!order) throw new Error('Order not found');
+  if (requiredRole === 'buyer' && order.buyer_id !== userId)
+    throw new Error('Unauthorized');
+  if (requiredRole === 'seller' && order.seller_id !== userId)
+    throw new Error('Unauthorized');
+  if (!requiredRole && order.buyer_id !== userId && order.seller_id !== userId)
+    throw new Error('Unauthorized');
+  return order;
+}
+
+/**
  * Parse PostgreSQL array string thành JavaScript array
  * Ví dụ: "{url1,url2}" → ["url1", "url2"]
  */
@@ -119,10 +139,7 @@ export async function checkAndCompleteOrder(orderId, userId) {
  * Submit payment (buyer gửi chứng từ thanh toán)
  */
 export async function submitPayment(orderId, userId, paymentData) {
-  const order = await orderModel.findById(orderId);
-  if (!order || order.buyer_id !== userId) {
-    throw new Error('Unauthorized');
-  }
+  const order = await getOrderWithAuth(orderId, userId, 'buyer');
 
   const { payment_method, payment_proof_urls, note, shipping_address, shipping_phone } = paymentData;
 
@@ -146,10 +163,7 @@ export async function submitPayment(orderId, userId, paymentData) {
  * Confirm payment (seller xác nhận đã nhận tiền)
  */
 export async function confirmPayment(orderId, userId) {
-  const order = await orderModel.findById(orderId);
-  if (!order || order.seller_id !== userId) {
-    throw new Error('Unauthorized');
-  }
+  const order = await getOrderWithAuth(orderId, userId, 'seller');
 
   const paymentInvoice = await invoiceModel.getPaymentInvoice(orderId);
   if (!paymentInvoice) {
@@ -164,10 +178,7 @@ export async function confirmPayment(orderId, userId) {
  * Submit shipping (seller gửi thông tin vận chuyển)
  */
 export async function submitShipping(orderId, userId, shippingData) {
-  const order = await orderModel.findById(orderId);
-  if (!order || order.seller_id !== userId) {
-    throw new Error('Unauthorized');
-  }
+  const order = await getOrderWithAuth(orderId, userId, 'seller');
 
   const { tracking_number, shipping_provider, shipping_proof_urls, note } = shippingData;
 
@@ -187,10 +198,7 @@ export async function submitShipping(orderId, userId, shippingData) {
  * Confirm delivery (buyer xác nhận đã nhận hàng)
  */
 export async function confirmDelivery(orderId, userId) {
-  const order = await orderModel.findById(orderId);
-  if (!order || order.buyer_id !== userId) {
-    throw new Error('Unauthorized');
-  }
+  const order = await getOrderWithAuth(orderId, userId, 'buyer');
 
   await orderModel.updateStatus(orderId, 'delivered', userId);
 }
@@ -199,10 +207,7 @@ export async function confirmDelivery(orderId, userId) {
  * Submit rating cho order (buyer hoặc seller đánh giá)
  */
 export async function submitRating(orderId, userId, { rating, comment }) {
-  const order = await orderModel.findById(orderId);
-  if (!order || (order.buyer_id !== userId && order.seller_id !== userId)) {
-    throw new Error('Unauthorized');
-  }
+  const order = await getOrderWithAuth(orderId, userId);
 
   const isBuyer = order.buyer_id === userId;
   const reviewerId = userId;
@@ -237,10 +242,7 @@ export async function submitRating(orderId, userId, { rating, comment }) {
  * Complete transaction (skip rating)
  */
 export async function completeTransaction(orderId, userId) {
-  const order = await orderModel.findById(orderId);
-  if (!order || (order.buyer_id !== userId && order.seller_id !== userId)) {
-    throw new Error('Unauthorized');
-  }
+  const order = await getOrderWithAuth(orderId, userId);
 
   const isBuyer = order.buyer_id === userId;
   const reviewerId = userId;
@@ -269,10 +271,7 @@ export async function completeTransaction(orderId, userId) {
  * Send message trong order chat
  */
 export async function sendMessage(orderId, userId, message) {
-  const order = await orderModel.findById(orderId);
-  if (!order || (order.buyer_id !== userId && order.seller_id !== userId)) {
-    throw new Error('Unauthorized');
-  }
+  const order = await getOrderWithAuth(orderId, userId);
 
   await orderChatModel.sendMessage({
     order_id: orderId,
@@ -316,10 +315,7 @@ export function formatMessagesHtml(messages, currentUserId) {
  * Lấy messages đã format HTML (bao gồm auth check)
  */
 export async function getFormattedMessages(orderId, userId) {
-  const order = await orderModel.findById(orderId);
-  if (!order || (order.buyer_id !== userId && order.seller_id !== userId)) {
-    throw new Error('Unauthorized');
-  }
+  const order = await getOrderWithAuth(orderId, userId);
 
   const messages = await orderChatModel.getMessagesByOrderId(orderId);
   return formatMessagesHtml(messages, userId);
