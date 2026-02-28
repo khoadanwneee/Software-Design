@@ -523,69 +523,34 @@ export async function unrejectBidder(productId, bidderId, sellerId) {
   return { success: true };
 }
 
-
-// helpers for buyNow process
-async function fetchProductForBuyNow(trx, productId) {
-  const product = await trx('products')
-    .leftJoin('users as seller', 'products.seller_id', 'seller.id')
-    .where('products.id', productId)
-    .select('products.*', 'seller.fullname as seller_name')
-    .first();
-  if (!product) throw new Error('Product not found');
-  return product;
-}
-
-function validateBuyNowBasic(product, userId) {
-  if (product.seller_id === userId) throw new Error('Seller cannot buy their own product');
-  const now = new Date();
-  const endDate = new Date(product.end_at);
-
-  if (product.is_sold !== null) throw new Error('Product is no longer available');
-  if (endDate <= now || product.closed_at) throw new Error('Auction has already ended');
-  if (!product.buy_now_price) throw new Error('Buy Now option is not available for this product');
-}
-
-async function ensureNotRejected(trx, productId, userId) {
-  const isRejected = await trx('rejected_bidders')
-    .where({ product_id: productId, bidder_id: userId })
-    .first();
-  if (isRejected) throw new Error('You have been rejected from bidding on this product');
-}
-
-async function checkRatingForBuyNow(product, userId) {
-  if (!product.allow_unrated_bidder) {
-    const ratingData = await reviewModel.calculateRatingPoint(userId);
-    const ratingPoint = ratingData ? ratingData.rating_point : 0;
-    if (ratingPoint === 0) throw new Error('This product does not allow bidders without ratings');
-  }
-}
-
-async function applyBuyNow(trx, productId, userId, price) {
-  const now = new Date();
-  await trx('products').where('id', productId).update({
-    current_price: price,
-    highest_bidder_id: userId,
-    highest_max_price: price,
-    end_at: now,
-    closed_at: now,
-    is_buy_now_purchase: true,
-  });
-  await trx('bidding_history').insert({
-    product_id: productId,
-    bidder_id: userId,
-    current_price: price,
-    is_buy_now: true,
-  });
-}
-
 export async function buyNow(productId, userId) {
   await db.transaction(async (trx) => {
-    const product = await fetchProductForBuyNow(trx, productId);
-    validateBuyNowBasic(product, userId);
+    const product = await validateProductExists(trx, productId);
+    validateProductNotSold(product);
+    validateBidderNotSeller(product, userId);
+    validateAuctionActive(product);
+    await validateBidderNotRejected(trx, productId, userId);
+    await validateBidderRating(product, userId);
+
+    if (!product.buy_now_price) throw new Error('Buy Now option is not available for this product');
+
+    const now = new Date();
     const buyNowPrice = parseFloat(product.buy_now_price);
 
-    await ensureNotRejected(trx, productId, userId);
-    await checkRatingForBuyNow(product, userId);
-    await applyBuyNow(trx, productId, userId, buyNowPrice);
+    await trx('products').where('id', productId).update({
+      current_price: buyNowPrice,
+      highest_bidder_id: userId,
+      highest_max_price: buyNowPrice,
+      end_at: now,
+      closed_at: now,
+      is_buy_now_purchase: true,
+    });
+
+    await trx('bidding_history').insert({
+      product_id: productId,
+      bidder_id: userId,
+      current_price: buyNowPrice,
+      is_buy_now: true,
+    });
   });
 }

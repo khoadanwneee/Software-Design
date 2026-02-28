@@ -1,4 +1,6 @@
 import bcrypt from 'bcryptjs';
+import { hashPasswordSync } from '../utils/auth.js';
+import { getPagination, buildPaginationInfo } from '../utils/pagination.js';
 import * as userService from '../services/user.service.js';
 import * as upgradeRequestService from '../services/upgradeRequest.service.js';
 import * as watchlistService from '../services/watchlist.service.js';
@@ -120,7 +122,7 @@ export const postResetPassword = async (req, res) => {
       error_message: 'User not found.',
     });
   }
-  const hashedPassword = bcrypt.hashSync(new_password, 10);
+  const hashedPassword = hashPasswordSync(new_password);
   await userService.update(user.id, { password_hash: hashedPassword });
   return res.render('vwAccount/auth/signin', {
     success_message: 'Your password has been reset. You can sign in now.',
@@ -212,7 +214,7 @@ export const postSignup = async (req, res) => {
     });
   }
 
-  const hashedPassword = bcrypt.hashSync(req.body.password, 10);
+  const hashedPassword = hashPasswordSync(req.body.password);
   console.log(hashedPassword);
   const user = {
     email: req.body.email,
@@ -376,7 +378,7 @@ export const putProfile = async (req, res) => {
     
     if (!currentUser.oauth_provider) {
       entity.password_hash = new_password
-        ? bcrypt.hashSync(new_password, 10)
+        ? hashPasswordSync(new_password)
         : currentUser.password_hash;
     }
 
@@ -428,25 +430,19 @@ export const postRequestUpgrade = async (req, res) => {
 };
 
 export const getWatchlist = async (req, res) => {
-  const limit = 3;
-  const page = parseInt(req.query.page) || 1;
-  const offset = (page - 1) * limit;
   const currentUserId = req.session.authUser.id;
+  const { page, limit, offset } = getPagination(req.query.page, 3);
   const watchlistProducts = await watchlistService.searchPageByUserId(currentUserId, limit, offset);
   const total = await watchlistService.countByUserId(currentUserId);
   const totalCount = Number(total.count);
-  const nPages = Math.ceil(totalCount / limit);
-  let from = (page - 1) * limit + 1;
-  let to = page * limit;
-  if (to > totalCount) to = totalCount;
-  if (totalCount === 0) { from = 0; to = 0; }
+  const { totalPages, from, to } = buildPaginationInfo(page, limit, totalCount);
   res.render('vwAccount/watchlist', {
     products: watchlistProducts,
     totalCount,
     from,
     to,
     currentPage: page,
-    totalPages: nPages,
+    totalPages,
   });
 };
 

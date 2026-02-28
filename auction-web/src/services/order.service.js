@@ -5,6 +5,7 @@ import * as reviewModel from '../models/review.model.js';
 import * as productModel from '../models/product.model.js';
 import * as ratingService from './rating.service.js';
 import db from '../utils/db.js';
+import { formatDateTime } from '../utils/format.js';
 
 /**
  * ============================================
@@ -256,13 +257,7 @@ export function formatMessagesHtml(messages, currentUserId) {
     const bubbleClass = isSent ? 'sent' : 'received';
 
     const msgDate = new Date(msg.created_at);
-    const year = msgDate.getFullYear();
-    const month = String(msgDate.getMonth() + 1).padStart(2, '0');
-    const day = String(msgDate.getDate()).padStart(2, '0');
-    const hour = String(msgDate.getHours()).padStart(2, '0');
-    const minute = String(msgDate.getMinutes()).padStart(2, '0');
-    const second = String(msgDate.getSeconds()).padStart(2, '0');
-    const formattedDate = `${hour}:${minute}:${second} ${day}/${month}/${year}`;
+    const formattedDate = formatDateTime(msgDate);
 
     messagesHtml += `
       <div class="chat-message ${messageClass}">

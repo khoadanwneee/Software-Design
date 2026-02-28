@@ -1,6 +1,7 @@
 import * as productDescUpdateModel from '../models/productDescriptionUpdate.model.js';
 import * as productModel from '../models/product.model.js';
 import { sendDescriptionUpdateNotifications } from '../utils/updateDescNotification.js';
+
 /**
  * ============================================
  * PRODUCT DESCRIPTION SERVICE
@@ -46,4 +47,5 @@ export async function appendDescriptionAndNotify({ productId, sellerId, descript
 
   return product;
 }
+
 

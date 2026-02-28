@@ -6,6 +6,8 @@ import * as biddingService from '../services/bidding.service.js';
 import * as commentService from '../services/comment.service.js';
 import * as userService from '../services/user.service.js';
 import * as watchlistService from '../services/watchlist.service.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { buildProductUrl } from '../utils/url.js';
 
 
 
@@ -147,7 +149,7 @@ export const postBid = async (req, res) => {
   const bidAmount = parseFloat(req.body.bidAmount.replace(/,/g, ''));
 
   try {
-    const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
+    const productUrl = buildProductUrl(req, productId);
     const result = await biddingService.placeBid(productId, userId, bidAmount, productUrl);
 
     req.session.success_message = biddingService.buildBidResultMessage(result);
@@ -165,7 +167,7 @@ export const postComment = async (req, res) => {
   const userId = req.session.authUser.id;
 
   try {
-    const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
+    const productUrl = buildProductUrl(req, productId);
     await commentService.createCommentAndNotify({ productId, userId, content, parentId, productUrl });
 
     req.session.success_message = 'Comment posted successfully!';
@@ -245,128 +247,79 @@ export const postUploadImages = async (req, res) => {
   }
 };
 
-export const postSubmitPayment = async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
-    
-    await orderService.submitPayment(orderId, userId, req.body);
-    
-    res.json({ success: true, message: 'Payment submitted successfully' });
-  } catch (error) {
-    console.error('Submit payment error:', error);
-    res.status(error.message === 'Unauthorized' ? 403 : 500)
-      .json({ error: error.message || 'Failed to submit payment' });
-  }
-};
+export const postSubmitPayment = asyncHandler(async (req, res) => {
+  const orderId = req.params.orderId;
+  const userId = req.session.authUser.id;
+  
+  await orderService.submitPayment(orderId, userId, req.body);
+  
+  res.json({ success: true, message: 'Payment submitted successfully' });
+});
 
-export const postConfirmPayment = async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
-    
-    await orderService.confirmPayment(orderId, userId);
-    
-    res.json({ success: true, message: 'Payment confirmed successfully' });
-  } catch (error) {
-    console.error('Confirm payment error:', error);
-    const status = error.message === 'Unauthorized' ? 403 
-      : error.message === 'No payment invoice found' ? 400 : 500;
-    res.status(status).json({ error: error.message || 'Failed to confirm payment' });
-  }
-};
+export const postConfirmPayment = asyncHandler(async (req, res) => {
+  const orderId = req.params.orderId;
+  const userId = req.session.authUser.id;
+  
+  await orderService.confirmPayment(orderId, userId);
+  
+  res.json({ success: true, message: 'Payment confirmed successfully' });
+});
 
-export const postSubmitShipping = async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
-    
-    await orderService.submitShipping(orderId, userId, req.body);
-    
-    res.json({ success: true, message: 'Shipping info submitted successfully' });
-  } catch (error) {
-    console.error('Submit shipping error:', error);
-    res.status(error.message === 'Unauthorized' ? 403 : 500)
-      .json({ error: error.message || 'Failed to submit shipping' });
-  }
-};
+export const postSubmitShipping = asyncHandler(async (req, res) => {
+  const orderId = req.params.orderId;
+  const userId = req.session.authUser.id;
+  
+  await orderService.submitShipping(orderId, userId, req.body);
+  
+  res.json({ success: true, message: 'Shipping info submitted successfully' });
+});
 
-export const postConfirmDelivery = async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
-    
-    await orderService.confirmDelivery(orderId, userId);
-    
-    res.json({ success: true, message: 'Delivery confirmed successfully' });
-  } catch (error) {
-    console.error('Confirm delivery error:', error);
-    res.status(error.message === 'Unauthorized' ? 403 : 500)
-      .json({ error: error.message || 'Failed to confirm delivery' });
-  }
-};
+export const postConfirmDelivery = asyncHandler(async (req, res) => {
+  const orderId = req.params.orderId;
+  const userId = req.session.authUser.id;
+  
+  await orderService.confirmDelivery(orderId, userId);
+  
+  res.json({ success: true, message: 'Delivery confirmed successfully' });
+});
 
-export const postSubmitRating = async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
-    const { rating, comment } = req.body;
-    
-    await orderService.submitRating(orderId, userId, { rating, comment });
-    
-    res.json({ success: true, message: 'Rating submitted successfully' });
-  } catch (error) {
-    console.error('Submit rating error:', error);
-    res.status(error.message === 'Unauthorized' ? 403 : 500)
-      .json({ error: error.message || 'Failed to submit rating' });
-  }
-};
+export const postSubmitRating = asyncHandler(async (req, res) => {
+  const orderId = req.params.orderId;
+  const userId = req.session.authUser.id;
+  const { rating, comment } = req.body;
+  
+  await orderService.submitRating(orderId, userId, { rating, comment });
+  
+  res.json({ success: true, message: 'Rating submitted successfully' });
+});
 
-export const postCompleteTransaction = async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
-    
-    await orderService.completeTransaction(orderId, userId);
-    
-    res.json({ success: true, message: 'Transaction completed' });
-  } catch (error) {
-    console.error('Complete transaction error:', error);
-    res.status(error.message === 'Unauthorized' ? 403 : 500)
-      .json({ error: error.message || 'Failed to complete transaction' });
-  }
-};
+export const postCompleteTransaction = asyncHandler(async (req, res) => {
+  const orderId = req.params.orderId;
+  const userId = req.session.authUser.id;
+  
+  await orderService.completeTransaction(orderId, userId);
+  
+  res.json({ success: true, message: 'Transaction completed' });
+});
 
-export const postSendMessage = async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
-    const { message } = req.body;
-    
-    await orderService.sendMessage(orderId, userId, message);
-    
-    res.json({ success: true, message: 'Message sent successfully' });
-  } catch (error) {
-    console.error('Send message error:', error);
-    res.status(error.message === 'Unauthorized' ? 403 : 500)
-      .json({ error: error.message || 'Failed to send message' });
-  }
-};
+export const postSendMessage = asyncHandler(async (req, res) => {
+  const orderId = req.params.orderId;
+  const userId = req.session.authUser.id;
+  const { message } = req.body;
+  
+  await orderService.sendMessage(orderId, userId, message);
+  
+  res.json({ success: true, message: 'Message sent successfully' });
+});
 
-export const getOrderMessages = async (req, res) => {
-  try {
-    const orderId = req.params.orderId;
-    const userId = req.session.authUser.id;
-    
-    const messagesHtml = await orderService.getFormattedMessages(orderId, userId);
-    
-    res.json({ success: true, messagesHtml });
-  } catch (error) {
-    console.error('Get messages error:', error);
-    res.status(error.message === 'Unauthorized' ? 403 : 500)
-      .json({ error: error.message || 'Failed to get messages' });
-  }
-};
+export const getOrderMessages = asyncHandler(async (req, res) => {
+  const orderId = req.params.orderId;
+  const userId = req.session.authUser.id;
+  
+  const messagesHtml = await orderService.getFormattedMessages(orderId, userId);
+  
+  res.json({ success: true, messagesHtml });
+});
 
 export const postRejectBidder = async (req, res) => {
   const { productId, bidderId } = req.body;

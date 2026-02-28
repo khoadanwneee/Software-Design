@@ -1,7 +1,9 @@
 import bcrypt from 'bcryptjs';
+import { hashPassword } from '../../utils/auth.js';
 import * as upgradeRequestService from '../../services/upgradeRequest.service.js';
 import * as userService from '../../services/user.service.js';
 import { sendMail } from '../../utils/mailer.js';
+import { emailSimpleLayout } from '../../utils/emailTemplates.js';
 
 export const getList = async (req, res) => {
     const users = await userService.loadAllUsers();
@@ -25,7 +27,7 @@ export const getAdd = async (req, res) => {
 export const postAdd = async (req, res) => {
     try {
         const { fullname, email, address, date_of_birth, role, email_verified, password } = req.body;
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await hashPassword(password);
         const newUser = {
             fullname,
             email,
@@ -82,7 +84,7 @@ export const postResetPassword = async (req, res) => {
     try {
         const { id } = req.body;
         const defaultPassword = '123';
-        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+        const hashedPassword = await hashPassword(defaultPassword);
         
         const user = await userService.findById(id);
         
@@ -93,12 +95,7 @@ export const postResetPassword = async (req, res) => {
         
         if (user && user.email) {
             try {
-                await sendMail({
-                    to: user.email,
-                    subject: 'Your Password Has Been Reset - Online Auction',
-                    html: `
-                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                            <h2 style="color: #333;">Password Reset Notification</h2>
+                const resetBody = `
                             <p>Dear <strong>${user.fullname}</strong>,</p>
                             <p>Your account password has been reset by an administrator.</p>
                             <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
@@ -106,11 +103,11 @@ export const postResetPassword = async (req, res) => {
                                 <p style="font-size: 24px; color: #e74c3c; margin: 10px 0; font-weight: bold;">${defaultPassword}</p>
                             </div>
                             <p style="color: #e74c3c;"><strong>Important:</strong> Please log in and change your password immediately for security purposes.</p>
-                            <p>If you did not request this password reset, please contact our support team immediately.</p>
-                            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                            <p style="color: #888; font-size: 12px;">This is an automated message from Online Auction. Please do not reply to this email.</p>
-                        </div>
-                    `
+                            <p>If you did not request this password reset, please contact our support team immediately.</p>`;
+                await sendMail({
+                    to: user.email,
+                    subject: 'Your Password Has Been Reset - Online Auction',
+                    html: emailSimpleLayout('Password Reset Notification', resetBody, '#333')
                 });
                 console.log(`Password reset email sent to ${user.email}`);
             } catch (emailError) {

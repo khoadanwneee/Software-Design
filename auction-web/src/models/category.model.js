@@ -1,8 +1,8 @@
 import db from '../utils/db.js';
 
-export async function findByCategoryId(id){
-    // Lấy thông tin category chính
-    const category = await db('categories as c')
+// DRY fix: Shared base query for category with product count
+function baseCategoryQuery() {
+    return db('categories as c')
         .leftJoin('categories as parent', 'c.parent_id', 'parent.id')
         .leftJoin('products as p', 'c.id', 'p.category_id')
         .select(
@@ -12,7 +12,11 @@ export async function findByCategoryId(id){
             'parent.name as parent_name'
         )
         .count('p.id as product_count')
-        .groupBy('c.id', 'c.name', 'c.parent_id', 'parent.name')
+        .groupBy('c.id', 'c.name', 'c.parent_id', 'parent.name');
+}
+
+export async function findByCategoryId(id){
+    const category = await baseCategoryQuery()
         .where('c.id', id)
         .first();
     
@@ -31,17 +35,7 @@ export async function findByCategoryId(id){
     return category;
 }
 export function findAll() {
-    return db('categories as c')
-        .leftJoin('categories as parent', 'c.parent_id', 'parent.id')
-        .leftJoin('products as p', 'c.id', 'p.category_id')
-        .select(
-            'c.id',
-            'c.name',
-            'c.parent_id',
-            'parent.name as parent_name'
-        )
-        .count('p.id as product_count')
-        .groupBy('c.id', 'c.name', 'c.parent_id', 'parent.name')
+    return baseCategoryQuery()
         .orderBy('c.parent_id', 'asc')
         .orderBy('c.id', 'asc');
 }
