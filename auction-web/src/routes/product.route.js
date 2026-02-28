@@ -51,8 +51,8 @@ router.post('/bid', isAuthenticated, productController.postBid);
 // Comments
 router.post('/comment', isAuthenticated, productController.postComment);
 
-// Bid history API
-router.get('/bid-history/:productId', productController.getBidHistory);
+// // Bid history API
+// router.get('/bid-history/:productId', productController.getBidHistory);
 
 // Complete order
 router.get('/complete-order', isAuthenticated, productController.getCompleteOrder);

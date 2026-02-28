@@ -180,16 +180,17 @@ export const postComment = async (req, res) => {
   }
 };
 
-export const getBidHistory = async (req, res) => {
-  try {
-    const productId = parseInt(req.params.productId);
-    const history = await biddingService.getBiddingHistory(productId);
-    res.json({ success: true, data: history });
-  } catch (error) {
-    console.error('Get bid history error:', error);
-    res.status(500).json({ success: false, message: 'Unable to load bidding history' });
-  }
-};
+//Dont need anymore
+// export const getBidHistory = async (req, res) => {
+//   try {
+//     const productId = parseInt(req.params.productId);
+//     const history = await biddingService.getBiddingHistory(productId);
+//     res.json({ success: true, data: history });
+//   } catch (error) {
+//     console.error('Get bid history error:', error);
+//     res.status(500).json({ success: false, message: 'Unable to load bidding history' });
+//   }
+// };
 
 export const getCompleteOrder = async (req, res) => {
   const userId = req.session.authUser.id;
