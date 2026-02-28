@@ -373,11 +373,7 @@ export const postRejectBidder = async (req, res) => {
   const sellerId = req.session.authUser.id;
 
   try {
-    const { rejectedUser, product, seller } = await biddingService.rejectBidder(productId, bidderId, sellerId);
-
-    const homeUrl = `${req.protocol}://${req.get('host')}/`;
-    biddingService.sendRejectBidderEmail(rejectedUser, product, seller?.fullname || 'N/A', homeUrl);
-
+    await biddingService.rejectBidder(productId, bidderId, sellerId);
     res.json({ success: true, message: 'Bidder rejected successfully' });
   } catch (error) {
     console.error('Error rejecting bidder:', error);
