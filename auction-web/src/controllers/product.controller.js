@@ -7,6 +7,7 @@ import * as commentService from '../services/comment.service.js';
 import * as userService from '../services/user.service.js';
 import * as watchlistService from '../services/watchlist.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { buildProductUrl } from '../utils/url.js';
 
 
 
@@ -148,7 +149,7 @@ export const postBid = async (req, res) => {
   const bidAmount = parseFloat(req.body.bidAmount.replace(/,/g, ''));
 
   try {
-    const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
+    const productUrl = buildProductUrl(req, productId);
     const result = await biddingService.placeBid(productId, userId, bidAmount, productUrl);
 
     req.session.success_message = biddingService.buildBidResultMessage(result);
@@ -166,7 +167,7 @@ export const postComment = async (req, res) => {
   const userId = req.session.authUser.id;
 
   try {
-    const productUrl = `${req.protocol}://${req.get('host')}/products/detail?id=${productId}`;
+    const productUrl = buildProductUrl(req, productId);
     await commentService.createCommentAndNotify({ productId, userId, content, parentId, productUrl });
 
     req.session.success_message = 'Comment posted successfully!';

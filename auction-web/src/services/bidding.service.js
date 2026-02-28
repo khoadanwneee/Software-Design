@@ -507,33 +507,17 @@ export async function unrejectBidder(productId, bidderId, sellerId) {
 
 export async function buyNow(productId, userId) {
   await db.transaction(async (trx) => {
-    const product = await trx('products')
-      .leftJoin('users as seller', 'products.seller_id', 'seller.id')
-      .where('products.id', productId)
-      .select('products.*', 'seller.fullname as seller_name')
-      .first();
+    const product = await validateProductExists(trx, productId);
+    validateProductNotSold(product);
+    validateBidderNotSeller(product, userId);
+    validateAuctionActive(product);
+    await validateBidderNotRejected(trx, productId, userId);
+    await validateBidderRating(product, userId);
 
-    if (!product) throw new Error('Product not found');
-    if (product.seller_id === userId) throw new Error('Seller cannot buy their own product');
-
-    const now = new Date();
-    const endDate = new Date(product.end_at);
-    if (product.is_sold !== null) throw new Error('Product is no longer available');
-    if (endDate <= now || product.closed_at) throw new Error('Auction has already ended');
     if (!product.buy_now_price) throw new Error('Buy Now option is not available for this product');
 
+    const now = new Date();
     const buyNowPrice = parseFloat(product.buy_now_price);
-
-    const isRejected = await trx('rejected_bidders')
-      .where({ product_id: productId, bidder_id: userId })
-      .first();
-    if (isRejected) throw new Error('You have been rejected from bidding on this product');
-
-    if (!product.allow_unrated_bidder) {
-      const ratingData = await reviewModel.calculateRatingPoint(userId);
-      const ratingPoint = ratingData ? ratingData.rating_point : 0;
-      if (ratingPoint === 0) throw new Error('This product does not allow bidders without ratings');
-    }
 
     await trx('products').where('id', productId).update({
       current_price: buyNowPrice,

@@ -1,7 +1,8 @@
 import db from '../utils/db.js';
 import { normalizeSearchText } from '../utils/text.js';
 
-// Reusable query fragments
+// ============ REUSABLE QUERY FRAGMENTS ============
+
 const BID_COUNT_SUBQUERY = db.raw(
   '(SELECT COUNT(*) FROM bidding_history WHERE bidding_history.product_id = products.id) AS bid_count'
 );
@@ -24,6 +25,33 @@ export const PRODUCT_STATUS_CASE = db.raw(`
   END AS status
 `);
 
+const BIDS_SUM_SUBQUERY = db.raw(`
+  COALESCE(SUM((
+    SELECT COUNT(*)
+    FROM bidding_history
+    WHERE bidding_history.product_id = products.id
+  )), 0) as total_bids
+`);
+
+// ============ SORT STRATEGY (DRY fix: replaces duplicated if-else chains) ============
+
+const SORT_STRATEGIES = {
+  price_asc:  { column: 'products.current_price', order: 'asc' },
+  price_desc: { column: 'products.current_price', order: 'desc' },
+  newest:     { column: 'products.created_at',     order: 'desc' },
+  oldest:     { column: 'products.created_at',     order: 'asc' },
+};
+
+function applySorting(query, sort, defaultColumn = 'products.created_at', defaultOrder = 'desc') {
+  const strategy = SORT_STRATEGIES[sort];
+  if (strategy) {
+    return query.orderBy(strategy.column, strategy.order);
+  }
+  return query.orderBy(defaultColumn, defaultOrder);
+}
+
+// ============ REUSABLE SCOPES ============
+
 function scopeActive(query) {
   return query
     .where('products.end_at', '>', new Date())
@@ -35,6 +63,40 @@ function scopeWatchlist(query, userId) {
     this.on('products.id', '=', 'watchlists.product_id')
       .andOnVal('watchlists.user_id', '=', userId || -1);
   });
+}
+
+// ============ SELLER SCOPES (DRY fix: replaces 5 duplicated count/find functions) ============
+
+const SELLER_SCOPES = {
+  active: (q) => q.where('end_at', '>', new Date()).whereNull('closed_at'),
+  sold: (q) => q.where('end_at', '<=', new Date()).where('is_sold', true),
+  pending: (q) => q
+    .where(function() {
+      this.where('end_at', '<=', new Date()).orWhereNotNull('closed_at');
+    })
+    .whereNotNull('highest_bidder_id')
+    .whereNull('is_sold'),
+  expired: (q) => q
+    .where(function() {
+      this.where(function() {
+        this.where('end_at', '<=', new Date()).whereNull('highest_bidder_id');
+      }).orWhere('is_sold', false);
+    }),
+};
+
+function countBySellerScope(sellerId, scope) {
+  const query = db('products').where('seller_id', sellerId);
+  if (scope && SELLER_SCOPES[scope]) {
+    query.modify(SELLER_SCOPES[scope]);
+  }
+  return query.count('id as count').first();
+}
+
+function buildSellerProductQuery(sellerId) {
+  return db('products')
+    .leftJoin('categories', 'products.category_id', 'categories.id')
+    .where('seller_id', sellerId)
+    .select('products.*', 'categories.name as category_name', BID_COUNT_SUBQUERY);
 }
 
 export function findAll() {
@@ -156,7 +218,7 @@ function buildSearchQuery(keywords, logic) {
 }
 
 export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'or', sort = '') {
-  let query = buildSearchQuery(keywords, logic)
+  return buildSearchQuery(keywords, logic)
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
     .modify(scopeWatchlist, userId)
     .select(
@@ -165,22 +227,10 @@ export function searchPageByKeywords(keywords, limit, offset, userId, logic = 'o
       MASKED_BIDDER_NAME,
       BID_COUNT_SUBQUERY,
       IS_FAVORITE_CHECK
-    );
-
-  // Apply sorting
-  if (sort === 'price_asc') {
-    query = query.orderBy('products.current_price', 'asc');
-  } else if (sort === 'price_desc') {
-    query = query.orderBy('products.current_price', 'desc');
-  } else if (sort === 'newest') {
-    query = query.orderBy('products.created_at', 'desc');
-  } else if (sort === 'oldest') {
-    query = query.orderBy('products.created_at', 'asc');
-  } else {
-    query = query.orderBy('products.end_at', 'asc');
-  }
-
-  return query.limit(limit).offset(offset);
+    )
+    .modify((qb) => applySorting(qb, sort, 'products.end_at', 'asc'))
+    .limit(limit)
+    .offset(offset);
 }
 
 export function countByKeywords(keywords, logic = 'or') {
@@ -192,40 +242,35 @@ export function countAll() {
   return db('products').count('id as count').first();
 }
 
-export function findByCategoryId(categoryId, limit, offset, sort, currentUserId) {
-  // currentUserId: ID của người đang xem (nếu chưa đăng nhập thì truyền null hoặc undefined)
+// DRY fix: Unified category filter (merges findByCategoryId + findByCategoryIds)
+export function findByCategoryFilter(categoryIds, limit, offset, sort, currentUserId) {
+  const filterFn = Array.isArray(categoryIds)
+    ? (q) => q.whereIn('products.category_id', categoryIds)
+    : (q) => q.where('products.category_id', categoryIds);
 
   return db('products')
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
     .modify(scopeWatchlist, currentUserId)
-    .where('products.category_id', categoryId)
+    .modify(filterFn)
     .modify(scopeActive)
     .select(
       'products.*',
-      
       MASKED_BIDDER_NAME,
       BID_COUNT_SUBQUERY,
       IS_FAVORITE_CHECK
     )
-    .modify((queryBuilder) => {
-      if (sort === 'price_asc') {
-        queryBuilder.orderBy('products.current_price', 'asc');
-      }
-      else if (sort === 'price_desc') {
-        queryBuilder.orderBy('products.current_price', 'desc');
-      }
-      else if (sort === 'newest') {
-        queryBuilder.orderBy('products.created_at', 'desc');
-      }
-      else if (sort === 'oldest') {
-        queryBuilder.orderBy('products.created_at', 'asc');
-      }
-      else {
-        queryBuilder.orderBy('products.created_at', 'desc');
-      }
-    })
+    .modify((qb) => applySorting(qb, sort))
     .limit(limit)
     .offset(offset);
+}
+
+// Backward-compatible aliases
+export function findByCategoryId(categoryId, limit, offset, sort, currentUserId) {
+  return findByCategoryFilter(categoryId, limit, offset, sort, currentUserId);
+}
+
+export function findByCategoryIds(categoryIds, limit, offset, sort, currentUserId) {
+  return findByCategoryFilter(categoryIds, limit, offset, sort, currentUserId);
 }
 
 export function countByCategoryId(categoryId) {
@@ -233,39 +278,6 @@ export function countByCategoryId(categoryId) {
     .where('category_id', categoryId)
     .count('id as count')
     .first();
-}
-
-export function findByCategoryIds(categoryIds, limit, offset, sort, currentUserId) {
-  return db('products')
-    .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    .modify(scopeWatchlist, currentUserId)
-    .whereIn('products.category_id', categoryIds)
-    .modify(scopeActive)
-    .select(
-      'products.*',
-      MASKED_BIDDER_NAME,
-      BID_COUNT_SUBQUERY,
-      IS_FAVORITE_CHECK
-    )
-    .modify((queryBuilder) => {
-      if (sort === 'price_asc') {
-        queryBuilder.orderBy('products.current_price', 'asc');
-      }
-      else if (sort === 'price_desc') {
-        queryBuilder.orderBy('products.current_price', 'desc');
-      }
-      else if (sort === 'newest') {
-        queryBuilder.orderBy('products.created_at', 'desc');
-      }
-      else if (sort === 'oldest') {
-        queryBuilder.orderBy('products.created_at', 'asc');
-      }
-      else {
-        queryBuilder.orderBy('products.created_at', 'desc');
-      }
-    })
-    .limit(limit)
-    .offset(offset);
 }
 
 export function countByCategoryIds(categoryIds) {
@@ -351,57 +363,25 @@ export function deleteProduct(productId) {
     .del();
 }
 
-// Seller Statistics Functions
+// DRY fix: Seller count functions use shared countBySellerScope
 export function countProductsBySellerId(sellerId) {
-  return db('products')
-    .where('seller_id', sellerId)
-    .count('id as count')
-    .first();
+  return countBySellerScope(sellerId, null);
 }
 
 export function countActiveProductsBySellerId(sellerId) {
-  return db('products')
-    .where('seller_id', sellerId)
-    .where('end_at', '>', new Date())
-    .whereNull('closed_at')
-    .count('id as count')
-    .first();
+  return countBySellerScope(sellerId, 'active');
 }
 
 export function countSoldProductsBySellerId(sellerId) {
-  return db('products')
-    .where('seller_id', sellerId)
-    .where('end_at', '<=', new Date())
-    .where('is_sold', true)
-    .count('id as count')
-    .first();
+  return countBySellerScope(sellerId, 'sold');
 }
 
 export function countPendingProductsBySellerId(sellerId) {
-  return db('products')
-    .where('seller_id', sellerId)
-    .where(function() {
-      this.where('end_at', '<=', new Date())
-        .orWhereNotNull('closed_at');
-    })
-    .whereNotNull('highest_bidder_id')
-    .whereNull('is_sold')
-    .count('id as count')
-    .first();
+  return countBySellerScope(sellerId, 'pending');
 }
 
 export function countExpiredProductsBySellerId(sellerId) {
-  return db('products')
-    .where('seller_id', sellerId)
-    .where(function() {
-      this.where(function() {
-        this.where('end_at', '<=', new Date())
-            .whereNull('highest_bidder_id');
-      })
-      .orWhere('is_sold', false);
-    })
-    .count('id as count')
-    .first();
+  return countBySellerScope(sellerId, 'expired');
 }
 
 export async function getSellerStats(sellerId) {
@@ -417,12 +397,7 @@ export async function getSellerStats(sellerId) {
 export function sumPendingRevenue(sellerId) {
   return db('products')
     .where('seller_id', sellerId)
-    .where(function() {
-      this.where('end_at', '<=', new Date())
-        .orWhereNotNull('closed_at');
-    })
-    .whereNotNull('highest_bidder_id')
-    .whereNull('is_sold')
+    .modify(SELLER_SCOPES.pending)
     .sum('current_price as revenue')
     .first();
 }
@@ -433,140 +408,73 @@ export function sumPendingRevenue(sellerId) {
 export function sumCompletedRevenue(sellerId) {
   return db('products')
     .where('seller_id', sellerId)
-    .where('is_sold', true)
+    .modify(SELLER_SCOPES.sold)
     .sum('current_price as revenue')
     .first();
 }
 
+// DRY fix: Seller product list queries use shared buildSellerProductQuery
 export function findAllProductsBySellerId(sellerId) {
-  return db('products')
-    .leftJoin('categories', 'products.category_id', 'categories.id')
-    .where('seller_id', sellerId)
-    .select(
-      'products.*', 'categories.name as category_name',
-      BID_COUNT_SUBQUERY,
-      PRODUCT_STATUS_CASE
-    );
+  return buildSellerProductQuery(sellerId)
+    .select(PRODUCT_STATUS_CASE);
 }
 
 export function findActiveProductsBySellerId(sellerId) {
-  return db('products')
-    .leftJoin('categories', 'products.category_id', 'categories.id')
-    .where('seller_id', sellerId)
-    .where('end_at', '>', new Date())
-    .whereNull('closed_at')
-    .select(
-      'products.*', 'categories.name as category_name', 
-      BID_COUNT_SUBQUERY
-    );
+  return buildSellerProductQuery(sellerId)
+    .modify(SELLER_SCOPES.active);
 }
 
 export function findPendingProductsBySellerId(sellerId) {
-  return db('products')
-    .leftJoin('categories', 'products.category_id', 'categories.id')
+  return buildSellerProductQuery(sellerId)
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    .where('seller_id', sellerId)
-    .where(function() {
-      this.where('end_at', '<=', new Date())
-        .orWhereNotNull('closed_at');
-    })
-    .whereNotNull('highest_bidder_id')
-    .whereNull('is_sold')
+    .modify(SELLER_SCOPES.pending)
     .select(
-      'products.*', 
-      'categories.name as category_name', 
       'users.fullname as highest_bidder_name',
-      'users.email as highest_bidder_email',
-      BID_COUNT_SUBQUERY
+      'users.email as highest_bidder_email'
     );
 }
 
 export function findSoldProductsBySellerId(sellerId) {
-  return db('products')
-    .leftJoin('categories', 'products.category_id', 'categories.id')
+  return buildSellerProductQuery(sellerId)
     .leftJoin('users', 'products.highest_bidder_id', 'users.id')
-    .where('seller_id', sellerId)
-    .where('end_at', '<=', new Date())
-    .where('is_sold', true)
+    .modify(SELLER_SCOPES.sold)
     .select(
-      'products.*', 
-      'categories.name as category_name',
       'users.fullname as highest_bidder_name',
-      'users.email as highest_bidder_email',
-      BID_COUNT_SUBQUERY
+      'users.email as highest_bidder_email'
     );
 }
 
 export function findExpiredProductsBySellerId(sellerId) {
-  return db('products')
-    .leftJoin('categories', 'products.category_id', 'categories.id')
+  return buildSellerProductQuery(sellerId)
+    .modify(SELLER_SCOPES.expired)
+    .select(PRODUCT_STATUS_CASE);
+}
+
+// DRY fix: Unified stats function (merges getSoldProductsStats + getPendingProductsStats)
+async function getProductsStatsByScope(sellerId, scopeFn, countAlias, revenueAlias) {
+  const result = await db('products')
     .where('seller_id', sellerId)
-    .where(function() {
-      this.where(function() {
-        this.where('end_at', '<=', new Date())
-            .whereNull('highest_bidder_id');
-      })
-      .orWhere('is_sold', false);
-    })
+    .modify(scopeFn)
     .select(
-      'products.*',
-      'categories.name as category_name',
-      PRODUCT_STATUS_CASE
-    );
+      db.raw(`COUNT(products.id) as ${countAlias}`),
+      db.raw(`COALESCE(SUM(products.current_price), 0) as ${revenueAlias}`),
+      BIDS_SUM_SUBQUERY
+    )
+    .first();
+
+  return {
+    [countAlias]: parseInt(result[countAlias]) || 0,
+    [revenueAlias]: parseFloat(result[revenueAlias]) || 0,
+    total_bids: parseInt(result.total_bids) || 0
+  };
 }
 
 export async function getSoldProductsStats(sellerId) {
-  const result = await db('products')
-    .where('seller_id', sellerId)
-    .where('end_at', '<=', new Date())
-    .where('is_sold', true)
-    .select(
-      db.raw('COUNT(products.id) as total_sold'),
-      db.raw('COALESCE(SUM(products.current_price), 0) as total_revenue'),
-      db.raw(`
-        COALESCE(SUM((
-          SELECT COUNT(*)
-          FROM bidding_history
-          WHERE bidding_history.product_id = products.id
-        )), 0) as total_bids
-      `)
-    )
-    .first();
-
-  return {
-    total_sold: parseInt(result.total_sold) || 0,
-    total_revenue: parseFloat(result.total_revenue) || 0,
-    total_bids: parseInt(result.total_bids) || 0
-  };
+  return getProductsStatsByScope(sellerId, SELLER_SCOPES.sold, 'total_sold', 'total_revenue');
 }
 
 export async function getPendingProductsStats(sellerId) {
-  const result = await db('products')
-    .where('seller_id', sellerId)
-    .where(function() {
-      this.where('end_at', '<=', new Date())
-        .orWhereNotNull('closed_at');
-    })
-    .whereNotNull('highest_bidder_id')
-    .whereNull('is_sold')
-    .select(
-      db.raw('COUNT(products.id) as total_pending'),
-      db.raw('COALESCE(SUM(products.current_price), 0) as pending_revenue'),
-      db.raw(`
-        COALESCE(SUM((
-          SELECT COUNT(*)
-          FROM bidding_history
-          WHERE bidding_history.product_id = products.id
-        )), 0) as total_bids
-      `)
-    )
-    .first();
-
-  return {
-    total_pending: parseInt(result.total_pending) || 0,
-    pending_revenue: parseFloat(result.pending_revenue) || 0,
-    total_bids: parseInt(result.total_bids) || 0
-  };
+  return getProductsStatsByScope(sellerId, SELLER_SCOPES.pending, 'total_pending', 'pending_revenue');
 }
 
 export async function cancelProduct(productId, sellerId) {

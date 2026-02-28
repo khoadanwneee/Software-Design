@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { hashPassword } from '../../utils/auth.js';
 import * as upgradeRequestService from '../../services/upgradeRequest.service.js';
 import * as userService from '../../services/user.service.js';
 import { sendMail } from '../../utils/mailer.js';
@@ -26,7 +27,7 @@ export const getAdd = async (req, res) => {
 export const postAdd = async (req, res) => {
     try {
         const { fullname, email, address, date_of_birth, role, email_verified, password } = req.body;
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await hashPassword(password);
         const newUser = {
             fullname,
             email,
@@ -83,7 +84,7 @@ export const postResetPassword = async (req, res) => {
     try {
         const { id } = req.body;
         const defaultPassword = '123';
-        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+        const hashedPassword = await hashPassword(defaultPassword);
         
         const user = await userService.findById(id);
         

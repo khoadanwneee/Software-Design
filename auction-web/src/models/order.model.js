@@ -103,37 +103,38 @@ export async function findByProductIdWithDetails(productId) {
 }
 
 /**
- * Lấy tất cả orders của một seller
+ * DRY fix: Unified order query by user role (merges findBySellerId + findByBuyerId)
  */
-export async function findBySellerId(sellerId) {
+function findOrdersByUser(userId, role) {
+  const filterColumn = role === 'buyer' ? 'orders.buyer_id' : 'orders.seller_id';
+  const joinAlias = role === 'buyer' ? 'seller' : 'buyer';
+  const joinColumn = role === 'buyer' ? 'orders.seller_id' : 'orders.buyer_id';
+
   return db('orders')
     .leftJoin('products', 'orders.product_id', 'products.id')
-    .leftJoin('users as buyer', 'orders.buyer_id', 'buyer.id')
-    .where('orders.seller_id', sellerId)
+    .leftJoin(`users as ${joinAlias}`, joinColumn, `${joinAlias}.id`)
+    .where(filterColumn, userId)
     .select(
       'orders.*',
       'products.name as product_name',
       'products.thumbnail as product_thumbnail',
-      'buyer.fullname as buyer_name'
+      `${joinAlias}.fullname as ${joinAlias}_name`
     )
     .orderBy('orders.created_at', 'desc');
+}
+
+/**
+ * Lấy tất cả orders của một seller
+ */
+export async function findBySellerId(sellerId) {
+  return findOrdersByUser(sellerId, 'seller');
 }
 
 /**
  * Lấy tất cả orders của một buyer
  */
 export async function findByBuyerId(buyerId) {
-  return db('orders')
-    .leftJoin('products', 'orders.product_id', 'products.id')
-    .leftJoin('users as seller', 'orders.seller_id', 'seller.id')
-    .where('orders.buyer_id', buyerId)
-    .select(
-      'orders.*',
-      'products.name as product_name',
-      'products.thumbnail as product_thumbnail',
-      'seller.fullname as seller_name'
-    )
-    .orderBy('orders.created_at', 'desc');
+  return findOrdersByUser(buyerId, 'buyer');
 }
 
 /**

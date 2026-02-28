@@ -13,18 +13,11 @@ import db from '../utils/db.js';
  */
 
 /**
- * Insert payment invoice vào DB (không xử lý file)
+ * DRY fix: Generic insert invoice (merges insertPaymentInvoice + insertShippingInvoice)
  */
-export async function insertPaymentInvoice(invoiceData) {
-  const { order_id, issuer_id, payment_method, payment_proof_urls, note } = invoiceData;
-
+export async function insertInvoice(invoiceData) {
   const rows = await db('invoices').insert({
-    order_id,
-    issuer_id,
-    invoice_type: 'payment',
-    payment_method,
-    payment_proof_urls,
-    note,
+    ...invoiceData,
     is_verified: false,
     created_at: db.fn.now()
   }).returning('*');
@@ -32,31 +25,17 @@ export async function insertPaymentInvoice(invoiceData) {
   return rows[0];
 }
 
-/**
- * Insert shipping invoice vào DB (không xử lý file)
- */
-export async function insertShippingInvoice(invoiceData) {
-  const { order_id, issuer_id, tracking_number, shipping_provider, shipping_proof_urls, note } = invoiceData;
-
-  const rows = await db('invoices').insert({
-    order_id,
-    issuer_id,
-    invoice_type: 'shipping',
-    tracking_number,
-    shipping_provider,
-    shipping_proof_urls,
-    note,
-    is_verified: false,
-    created_at: db.fn.now()
-  }).returning('*');
-
-  return rows[0];
+// Backward-compatible wrappers
+export function insertPaymentInvoice(data) {
+  const { order_id, issuer_id, payment_method, payment_proof_urls, note } = data;
+  return insertInvoice({ order_id, issuer_id, invoice_type: 'payment', payment_method, payment_proof_urls, note });
 }
 
-/**
- * Backward compatibility aliases
- * (các controller cũ vẫn gọi được, nhưng nên chuyển sang dùng invoice.service.js)
- */
+export function insertShippingInvoice(data) {
+  const { order_id, issuer_id, tracking_number, shipping_provider, shipping_proof_urls, note } = data;
+  return insertInvoice({ order_id, issuer_id, invoice_type: 'shipping', tracking_number, shipping_provider, shipping_proof_urls, note });
+}
+
 export const createPaymentInvoice = insertPaymentInvoice;
 export const createShippingInvoice = insertShippingInvoice;
 
@@ -86,13 +65,13 @@ export async function findByOrderId(orderId) {
 }
 
 /**
- * Lấy payment invoice của một order
+ * DRY fix: Generic invoice getter by type (merges getPaymentInvoice + getShippingInvoice)
  */
-export async function getPaymentInvoice(orderId) {
+export async function getInvoiceByType(orderId, type) {
   return db('invoices')
     .leftJoin('users as issuer', 'invoices.issuer_id', 'issuer.id')
     .where('invoices.order_id', orderId)
-    .where('invoices.invoice_type', 'payment')
+    .where('invoices.invoice_type', type)
     .select(
       'invoices.*',
       'issuer.fullname as issuer_name'
@@ -100,19 +79,13 @@ export async function getPaymentInvoice(orderId) {
     .first();
 }
 
-/**
- * Lấy shipping invoice của một order
- */
-export async function getShippingInvoice(orderId) {
-  return db('invoices')
-    .leftJoin('users as issuer', 'invoices.issuer_id', 'issuer.id')
-    .where('invoices.order_id', orderId)
-    .where('invoices.invoice_type', 'shipping')
-    .select(
-      'invoices.*',
-      'issuer.fullname as issuer_name'
-    )
-    .first();
+// Backward-compatible aliases
+export function getPaymentInvoice(orderId) {
+  return getInvoiceByType(orderId, 'payment');
+}
+
+export function getShippingInvoice(orderId) {
+  return getInvoiceByType(orderId, 'shipping');
 }
 
 /**
@@ -156,29 +129,24 @@ export async function deleteInvoice(invoiceId) {
 }
 
 /**
- * Kiểm tra xem order đã có payment invoice chưa
+ * DRY fix: Generic has-invoice check (merges hasPaymentInvoice + hasShippingInvoice)
  */
-export async function hasPaymentInvoice(orderId) {
+export async function hasInvoiceByType(orderId, type) {
   const count = await db('invoices')
     .where('order_id', orderId)
-    .where('invoice_type', 'payment')
+    .where('invoice_type', type)
     .count('* as count')
     .first();
 
   return count.count > 0;
 }
 
-/**
- * Kiểm tra xem order đã có shipping invoice chưa
- */
-export async function hasShippingInvoice(orderId) {
-  const count = await db('invoices')
-    .where('order_id', orderId)
-    .where('invoice_type', 'shipping')
-    .count('* as count')
-    .first();
+export function hasPaymentInvoice(orderId) {
+  return hasInvoiceByType(orderId, 'payment');
+}
 
-  return count.count > 0;
+export function hasShippingInvoice(orderId) {
+  return hasInvoiceByType(orderId, 'shipping');
 }
 
 /**

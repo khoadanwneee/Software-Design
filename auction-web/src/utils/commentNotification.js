@@ -1,9 +1,8 @@
 import * as productModel from '../models/product.model.js';
 import * as userModel from '../models/user.model.js';
-import * as biddingHistoryModel from '../models/biddingHistory.model.js';
-import * as productCommentModel from '../models/productComment.model.js';
 import { sendMail } from './mailer.js';
 import { emailSimpleLayout } from './emailTemplates.js';
+import { getProductNotificationRecipients } from './notificationRecipients.js';
 
 /**
  * Fire-and-forget notification logic previously embedded in comment.service.
@@ -20,21 +19,10 @@ export async function sendCommentNotifications({ productId, userId, content, par
 
       if (isSellerReplying && parentId) {
         // Seller trả lời → gửi cho tất cả bidders + commenters
-        const [bidders, commenters] = await Promise.all([
-          biddingHistoryModel.getUniqueBidders(productId),
-          productCommentModel.getUniqueCommenters(productId),
-        ]);
-
-        const recipientsMap = new Map();
-        bidders.forEach(b => {
-          if (b.id !== product.seller_id && b.email) recipientsMap.set(b.id, b);
-        });
-        commenters.forEach(c => {
-          if (c.id !== product.seller_id && c.email) recipientsMap.set(c.id, c);
-        });
+        const recipients = await getProductNotificationRecipients(productId, product.seller_id);
 
         const emailPromises = [];
-        for (const [, recipient] of recipientsMap) {
+        for (const recipient of recipients) {
           emailPromises.push(
             sendMail({
               to: recipient.email,
@@ -45,7 +33,7 @@ export async function sendCommentNotifications({ productId, userId, content, par
         }
 
         await Promise.all(emailPromises);
-        console.log(`Seller reply notification sent to ${recipientsMap.size} recipients`);
+        console.log(`Seller reply notification sent to ${recipients.length} recipients`);
       } else if (seller?.email && userId !== product.seller_id) {
         // Bidder comment/reply → gửi cho seller
         const subject = parentId

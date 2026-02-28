@@ -1,10 +1,9 @@
 import * as productDescUpdateModel from '../models/productDescriptionUpdate.model.js';
 import * as productModel from '../models/product.model.js';
-import * as biddingHistoryModel from '../models/biddingHistory.model.js';
-import * as productCommentModel from '../models/productComment.model.js';
 import { sendMail } from '../utils/mailer.js';
 import { emailLayout } from '../utils/emailTemplates.js';
 import { formatVND } from '../utils/format.js';
+import { getProductNotificationRecipients } from '../utils/notificationRecipients.js';
 
 /**
  * ============================================
@@ -58,19 +57,7 @@ export async function appendDescriptionAndNotify({ productId, sellerId, descript
 function sendDescriptionUpdateNotifications({ productId, sellerId, product, description, productUrl }) {
   (async () => {
     try {
-      const [bidders, commenters] = await Promise.all([
-        biddingHistoryModel.getUniqueBidders(productId),
-        productCommentModel.getUniqueCommenters(productId),
-      ]);
-
-      const notifyMap = new Map();
-      [...bidders, ...commenters].forEach(user => {
-        if (user.id !== sellerId && !notifyMap.has(user.email)) {
-          notifyMap.set(user.email, user);
-        }
-      });
-
-      const notifyUsers = Array.from(notifyMap.values());
+      const notifyUsers = await getProductNotificationRecipients(productId, sellerId);
       if (notifyUsers.length === 0) return;
 
       await Promise.all(

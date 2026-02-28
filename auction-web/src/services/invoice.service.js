@@ -62,50 +62,36 @@ export function moveUploadedFiles(tempUrls, type) {
 }
 
 /**
+ * DRY fix: Generic invoice creator (merges createPaymentInvoice + createShippingInvoice)
+ * Handles file move + DB insert for any invoice type.
+ */
+async function createInvoice(invoiceData, proofField, proofFolder) {
+  if (invoiceData[proofField]) {
+    invoiceData[proofField] = moveUploadedFiles(invoiceData[proofField], proofFolder);
+  }
+  return invoiceModel.insertInvoice(invoiceData);
+}
+
+/**
  * Tạo hóa đơn thanh toán (buyer) — move file + insert DB
  */
 export async function createPaymentInvoice(invoiceData) {
-  const { order_id, issuer_id, payment_method, payment_proof_urls, note } =
-    invoiceData;
-
-  const permanentUrls = moveUploadedFiles(
-    payment_proof_urls,
+  const { order_id, issuer_id, payment_method, payment_proof_urls, note } = invoiceData;
+  return createInvoice(
+    { order_id, issuer_id, invoice_type: 'payment', payment_method, payment_proof_urls, note },
+    'payment_proof_urls',
     'payment_proofs'
   );
-
-  return invoiceModel.insertPaymentInvoice({
-    order_id,
-    issuer_id,
-    payment_method,
-    payment_proof_urls: permanentUrls,
-    note,
-  });
 }
 
 /**
  * Tạo hóa đơn vận chuyển (seller) — move file + insert DB
  */
 export async function createShippingInvoice(invoiceData) {
-  const {
-    order_id,
-    issuer_id,
-    tracking_number,
-    shipping_provider,
-    shipping_proof_urls,
-    note,
-  } = invoiceData;
-
-  const permanentUrls = moveUploadedFiles(
-    shipping_proof_urls,
+  const { order_id, issuer_id, tracking_number, shipping_provider, shipping_proof_urls, note } = invoiceData;
+  return createInvoice(
+    { order_id, issuer_id, invoice_type: 'shipping', tracking_number, shipping_provider, shipping_proof_urls, note },
+    'shipping_proof_urls',
     'shipping_proofs'
   );
-
-  return invoiceModel.insertShippingInvoice({
-    order_id,
-    issuer_id,
-    tracking_number,
-    shipping_provider,
-    shipping_proof_urls: permanentUrls,
-    note,
-  });
 }
