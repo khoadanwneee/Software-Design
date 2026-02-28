@@ -1,7 +1,7 @@
 /**
  * Gửi email thông báo cập nhật mô tả (fire-and-forget)
  */
-function sendDescriptionUpdateNotifications({ productId, sellerId, product, description, productUrl }) {
+export function sendDescriptionUpdateNotifications({ productId, sellerId, product, description, productUrl }) {
   (async () => {
     try {
       const [bidders, commenters] = await Promise.all([
