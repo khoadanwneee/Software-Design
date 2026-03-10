@@ -8,7 +8,7 @@ public class Infantryman implements Soldier {
     private final int attackPower;
 
     public Infantryman() {
-        this.name = "Infantryman#" + (++counter);
+        this.name = "Infantryman #" + (++counter);
         this.hp = 100;
         this.attackPower = 10;
     }
