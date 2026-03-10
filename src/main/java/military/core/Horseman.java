@@ -8,8 +8,8 @@ public class Horseman implements Soldier {
     private final int attackPower;
 
     public Horseman() {
-        this.name = "Horseman#" + (++counter);
-        this.hp = 150;
+        this.name = "Horseman #" + (++counter);
+        this.hp = 250;
         this.attackPower = 15;
     }
 
