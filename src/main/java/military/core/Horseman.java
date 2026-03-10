@@ -1,5 +1,7 @@
 package military.core;
 
+import military.visitor.SoldierVisitor;
+
 public class Horseman implements Soldier {
     private static int counter = 0;
 
@@ -38,5 +40,10 @@ public class Horseman implements Soldier {
     @Override
     public boolean isAlive() {
         return hp > 0;
+    }
+
+    @Override
+    public void accept(SoldierVisitor visitor) {
+        visitor.visitHorseman(this);
     }
 }

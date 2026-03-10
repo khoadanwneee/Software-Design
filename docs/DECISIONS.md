@@ -27,3 +27,23 @@
 **Decision:** Dùng static counter trong mỗi class (`Infantryman#1`, `Horseman#2`...).
 
 **Tradeoff:** Đơn giản, đủ dùng cho mô phỏng. Không thread-safe nhưng requirement không yêu cầu concurrency.
+
+---
+
+## 2026-03-10 — DEC-004: accept() thêm vào Soldier interface (breaking change)
+
+**Context:** Visitor Pattern yêu cầu mọi Soldier phải có accept(SoldierVisitor). Đây là thay đổi interface, ảnh hưởng tất cả implementations.
+
+**Decision:** Thêm accept() vào Soldier interface và cập nhật tất cả 6 class implement Soldier (Infantryman, Horseman, SoldierGroup, EquipmentDecorator, SoldierProxy + 2 concrete decorators kế thừa từ EquipmentDecorator).
+
+**Reason:** Cần double dispatch cho Visitor. EquipmentDecorator và SoldierProxy delegate accept() xuống wrapped soldier để visitor đến đúng concrete type.
+
+---
+
+## 2026-03-10 — DEC-005: Abstract Factory trả về EquipmentDecorator thay vì Weapon/Armor interface riêng
+
+**Context:** Có thể tạo Weapon/Armor interface riêng, nhưng trang bị trong hệ thống đã là EquipmentDecorator (Decorator pattern từ Phase 2).
+
+**Decision:** ArmyFactory.createWeapon()/createArmor() trả về EquipmentDecorator. Mỗi thế hệ có concrete decorator riêng (MedievalSword, WorldWarRifle, SciFiLaserSword...).
+
+**Reason:** Tái sử dụng EquipmentDecorator, không cần thêm layer abstraction. Factory đảm bảo trang bị luôn tương thích với thế hệ vì chỉ tạo đúng loại.

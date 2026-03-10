@@ -1,5 +1,7 @@
 package military.core;
 
+import military.visitor.SoldierVisitor;
+
 public class Infantryman implements Soldier {
     private static int counter = 0;
 
@@ -15,14 +17,16 @@ public class Infantryman implements Soldier {
 
     @Override
     public int hit() {
-        if (!isAlive()) return 0;
+        if (!isAlive())
+            return 0;
         System.out.println(name + " attacks with power " + attackPower);
         return attackPower;
     }
 
     @Override
     public boolean wardOff(int strength) {
-        if (!isAlive()) return false;
+        if (!isAlive())
+            return false;
         hp -= strength;
         System.out.println(name + " receives " + strength + " damage, HP: " + Math.max(hp, 0));
         return isAlive();
@@ -36,5 +40,10 @@ public class Infantryman implements Soldier {
     @Override
     public boolean isAlive() {
         return hp > 0;
+    }
+
+    @Override
+    public void accept(SoldierVisitor visitor) {
+        visitor.visitInfantryman(this);
     }
 }

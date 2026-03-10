@@ -1,2 +1,0 @@
-javac military/core/*.java military/weapons/*.java military/weapons/medieval/*.java military/weaponry/*.java military/BattleTest.java
-Get-ChildItem -Include *.class -Recurse | Remove-Item

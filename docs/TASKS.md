@@ -34,7 +34,7 @@
 - `src/main/java/military/equipment/ShieldDecorator.java` — Tăng khả năng phòng thủ (giảm damage nhận vào)
 - `src/main/java/military/equipment/SwordDecorator.java` — Tăng sức tấn công
 
-**Status:** `[ ]` Not started
+**Status:** `[x]` Done
 
 ---
 
@@ -48,7 +48,7 @@
 
 - `src/main/java/military/proxy/SoldierProxy.java` — Implement `Soldier`, thêm `addShield()`, `addSword()`. Kiểm tra trùng lặp trước khi delegate xuống decorator
 
-**Status:** `[ ]` Not started
+**Status:** `[x]` Done
 
 ---
 
@@ -63,7 +63,7 @@
 - Sửa `src/main/java/military/equipment/ShieldDecorator.java` — Thêm `durability` field, giảm sau mỗi `wardOff()`
 - Sửa `src/main/java/military/equipment/SwordDecorator.java` — Thêm `durability` field, giảm sau mỗi `hit()`
 
-**Status:** `[ ]` Not started
+**Status:** `[x]` Done
 
 ---
 
@@ -77,7 +77,7 @@
 
 - `src/main/java/military/organization/SoldierGroup.java` — Composite node: chứa list `Soldier`, `hit()` = tổng, `wardOff()` = chia đều damage
 
-**Status:** `[ ]` Not started
+**Status:** `[x]` Done
 
 ---
 
@@ -95,7 +95,7 @@
 - Sửa `Soldier.java` — Thêm `void accept(SoldierVisitor visitor)`
 - Sửa `Infantryman.java`, `Horseman.java`, `SoldierGroup.java` — Implement `accept()`
 
-**Status:** `[ ]` Not started
+**Status:** `[x]` Done
 
 ---
 
@@ -112,7 +112,7 @@
 - `src/main/java/military/battle/DeathCountObserver.java` — Đếm tổng số binh lính tử trận
 - `src/main/java/military/battle/DeathNotifierObserver.java` — Hiển thị tên tử trận + gửi email mô phỏng
 
-**Status:** `[ ]` Not started
+**Status:** `[x]` Done
 
 ---
 
@@ -127,7 +127,7 @@
 - Sửa `src/main/java/military/battle/DeathCountObserver.java` — Private constructor + `getInstance()`
 - Sửa `src/main/java/military/battle/DeathNotifierObserver.java` — Private constructor + `getInstance()`
 
-**Status:** `[ ]` Not started
+**Status:** `[x]` Done — 2026-03-10
 
 ---
 
@@ -144,7 +144,7 @@
 - `src/main/java/military/factory/WorldWarFactory.java` — Súng trường, lựu đạn, mũ sắt
 - `src/main/java/military/factory/SciFiFactory.java` — Kiếm laser, vũ khí sinh học, giáp nano
 
-**Status:** `[ ]` Not started
+**Status:** `[x]` Done — 2026-03-10
 
 ---
 
