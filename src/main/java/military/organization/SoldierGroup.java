@@ -78,6 +78,6 @@ public class SoldierGroup implements Soldier {
 
     @Override
     public void accept(SoldierVisitor visitor) {
-        visitor.visitGroup(this);
+        visitor.visit(this);
     }
 }

@@ -13,19 +13,19 @@ public class DisplayVisitor implements SoldierVisitor {
     }
 
     @Override
-    public void visitInfantryman(Infantryman infantryman) {
+    public void visit(Infantryman infantryman) {
         System.out.println(prefix() + "- [Infantryman] " + infantryman.getName()
                 + (infantryman.isAlive() ? " (alive)" : " (dead)"));
     }
 
     @Override
-    public void visitHorseman(Horseman horseman) {
+    public void visit(Horseman horseman) {
         System.out.println(prefix() + "- [Horseman] " + horseman.getName()
                 + (horseman.isAlive() ? " (alive)" : " (dead)"));
     }
 
     @Override
-    public void visitGroup(SoldierGroup group) {
+    public void visit(SoldierGroup group) {
         System.out.println(prefix() + "[Group] " + group.getName());
         indent++;
         for (Soldier member : group.getMembers()) {
