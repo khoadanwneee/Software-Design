@@ -5,9 +5,9 @@ import military.core.Infantryman;
 import military.organization.SoldierGroup;
 
 public interface SoldierVisitor {
-    void visitInfantryman(Infantryman infantryman);
+    void visit(Infantryman infantryman);
 
-    void visitHorseman(Horseman horseman);
+    void visit(Horseman horseman);
 
-    void visitGroup(SoldierGroup group);
+    void visit(SoldierGroup group);
 }

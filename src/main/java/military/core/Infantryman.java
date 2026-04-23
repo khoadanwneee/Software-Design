@@ -44,6 +44,6 @@ public class Infantryman implements Soldier {
 
     @Override
     public void accept(SoldierVisitor visitor) {
-        visitor.visitInfantryman(this);
+        visitor.visit(this);
     }
 }

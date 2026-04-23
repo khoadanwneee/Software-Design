@@ -10,17 +10,17 @@ public class CountVisitor implements SoldierVisitor {
     private int horsemanCount = 0;
 
     @Override
-    public void visitInfantryman(Infantryman infantryman) {
+    public void visit(Infantryman infantryman) {
         infantryCount++;
     }
 
     @Override
-    public void visitHorseman(Horseman horseman) {
+    public void visit(Horseman horseman) {
         horsemanCount++;
     }
 
     @Override
-    public void visitGroup(SoldierGroup group) {
+    public void visit(SoldierGroup group) {
         for (Soldier member : group.getMembers()) {
             member.accept(this);
         }
