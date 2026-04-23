@@ -1,2 +1,5 @@
 # Ignore auction-web folder
 auction-web/
+docs/
+src/
+UML/
