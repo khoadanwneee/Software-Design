@@ -116,7 +116,7 @@ graph TB
     subgraph data["Data Layer"]
         PostgreSQL["PostgreSQL<br/>(Core Data)"]
         Redis["Redis<br/>(Cache & Locks)"]
-        ObjectStorage["S3-Compatible Storage<br/>(Images, Docs, Layouts)"]
+        ObjectStorage["Cloudinary<br/>(Images, Docs, Layouts, QR)"]
         SearchIndex["Elasticsearch<br/>(Optional Search Index)"]
         AnalyticsReadModel["Analytics Read Model<br/>(Materialized Views)"]
     end
@@ -254,7 +254,7 @@ graph TB
 | **Notification Service**      | Node.js                  | Consume event từ broker, render template, đọc preference, gửi email/push/SMS/chat theo channel abstraction. Có retry/throttling. |
 | **Check-in Service**          | Node.js                  | Xác thực QR, kiểm tra expiry/used status, ghi nhận check-in online, publish check-in event. |
 | **Check-in Sync Service**     | Node.js                  | Nhận batch sync offline từ mobile app, kiểm tra conflict/duplicate, ghi nhận check-in vào DB. |
-| **QR Code Service**           | Node.js                  | Tạo QR code/ticket, lưu ảnh QR vào object storage, expose URL/download QR. |
+| **QR Code Service**           | Node.js                  | Tạo QR code/ticket, lưu ảnh QR vào Cloudinary, expose URL/download QR. |
 | **AI Summary Worker**         | Python FastAPI/Celery    | Consume `pdf_uploaded`, extract text từ PDF, gọi LLM để tóm tắt, lưu AISummary. |
 | **Reporting / Analytics Service** | Node.js              | Cung cấp dashboard, show-up rate, revenue, no-show, export Excel/CSV dựa trên read model. |
 | **Realtime Seat Service**     | Node.js                  | Quản lý WebSocket/SSE subscription và broadcast `seat.updated` cho danh sách/chi tiết workshop. |
@@ -265,7 +265,7 @@ graph TB
 | ------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | **PostgreSQL**     | PostgreSQL 14+               | Lưu trữ transactional data: users, workshops, registrations, payments/refunds, check-ins, notifications, AI summaries, audit logs. |
 | **Redis**          | Redis 7+                     | Cache seat availability, session JWT, notification preferences, AI summary cache, distributed lock cho registration/check-in. |
-| **Object Storage** | S3-compatible (Minio/AWS S3) | Lưu ảnh workshop, tài liệu PDF, sơ đồ phòng, QR code, export reports. |
+| **File & Image Delivery** | Cloudinary | Lưu ảnh workshop, tài liệu PDF, sơ đồ phòng, QR code, export reports với CDN toàn cầu. |
 | **Elasticsearch**  | Elasticsearch/OpenSearch     | Optional full-text search cho workshop name/description/category. |
 | **Analytics Read Model** | PostgreSQL materialized view / OLAP | Pre-computed metrics cho dashboard, export và báo cáo sau sự kiện. |
 
@@ -325,7 +325,7 @@ graph LR
     subgraph Data["Data Layer"]
         DB["PostgreSQL"]
         Cache["Redis<br/>Seat Cache<br/>Locks<br/>Session"]
-        Storage["Object Storage"]
+        Storage["Cloudinary"]
         Search["Search Index"]
         Metrics["Analytics Read Model"]
     end
@@ -432,7 +432,7 @@ sequenceDiagram
     participant QRSvc as QR Service
     participant Cache as Redis
     participant DB as PostgreSQL
-    participant Storage as Object Storage
+    participant Storage as Cloudinary
     participant Broker as Message Broker
     participant NotifSvc as Notification Service
     participant EmailSvc as Email Service
@@ -694,7 +694,7 @@ sequenceDiagram
     participant API as API Gateway
     participant WorkshopSvc as Workshop Service
     participant DB as PostgreSQL
-    participant Storage as Object Storage
+    participant Storage as Cloudinary
     participant Jobs as Job Queue
     participant AIWorker as AI Summary Worker
     participant LLM as LLM Service
@@ -794,7 +794,7 @@ sequenceDiagram
     participant Metrics as Analytics Read Model
     participant DB as PostgreSQL
     participant AdminWeb as Admin Web
-    participant Storage as Object Storage
+    participant Storage as Cloudinary
 
     Broker->>Reporting: registration/payment/checkin/workshop events
     Reporting->>Metrics: Update precomputed metrics
@@ -954,10 +954,10 @@ sequenceDiagram
 **Trình tự:**
 
 1. Ban tổ chức tạo/cập nhật workshop và upload PDF
-2. Workshop Service validate file type/size, lưu PDF vào object storage
+2. Workshop Service validate file type/size, lưu PDF vào Cloudinary
 3. Tạo `workshop_files` record và publish job `pdf_uploaded`
 4. AI Summary Worker:
-   - Download PDF từ object storage
+   - Download PDF từ Cloudinary
    - Extract text, clean text, chunk nếu PDF dài
    - Gọi LLM Service để tạo tóm tắt 3-5 câu tiếng Việt
    - Lưu `ai_summaries` với status `DONE` hoặc `ERROR`
@@ -1014,7 +1014,7 @@ sequenceDiagram
    - Revenue, refund amount, payment success rate
    - Workshop hot/trending
 3. Reporting Service đọc materialized view/read model, fallback query PostgreSQL khi cần chi tiết
-4. Export report tạo file CSV/Excel trong Object Storage
+4. Export report tạo file CSV/Excel trong Cloudinary
 
 **Đảm bảo:**
 
@@ -1032,7 +1032,7 @@ sequenceDiagram
 | ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------- | -------------------------------------- |
 | **Transactional** (users, workshops, registrations, payments, refunds, check-ins, summaries) | ACID, relational, high consistency | PostgreSQL | Strong ACID guarantee, complex queries |
 | **Cache** (seat availability, session, locks, preferences, summary cache) | Ephemeral, fast access, high throughput | Redis | In-memory, atomic operations, TTL |
-| **Files** (QR images, room layouts, PDF materials, report exports) | Unstructured, large size | S3-compatible Object Storage | Scalable, cheap, CDN-friendly |
+| **Files** (QR images, room layouts, PDF materials, report exports) | Unstructured, large size | Cloudinary | Auto-optimized, CDN-friendly, integrated transformation |
 | **Events/Jobs** (registration, payment, refund, PDF processing, notification) | Async, durable, retryable | Message Broker / Job Queue | Guarantees delivery, supports replay and DLQ |
 | **Search** (workshop fulltext search, filtering) | Optional, fulltext index | Elasticsearch (optional) | Fast search, aggregation |
 | **Analytics Read Model** (dashboard metrics, exports) | Precomputed/read-heavy | Materialized views / OLAP | Avoid heavy analytical load on OLTP tables |
@@ -1071,7 +1071,7 @@ sequenceDiagram
   - Distributed locks (key: `lock:{resource}`)
   - Realtime notification queue
 
-#### **Object Storage (S3-compatible)**
+#### **Cloudinary**
 
 - **Khi nào dùng**: QR code, images, documents
 - **Tại sao**:
@@ -1257,7 +1257,7 @@ CREATE TABLE rooms (
     building VARCHAR(100),
     floor INT,
     capacity INT NOT NULL,
-    layout_url TEXT, -- URL sơ đồ phòng trong object storage
+    layout_url TEXT, -- URL sơ đồ phòng trong Cloudinary
     amenities JSONB, -- ['projector', 'mic', 'wifi']
     is_available BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1306,7 +1306,7 @@ CREATE TABLE tickets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     registration_id UUID NOT NULL UNIQUE REFERENCES registrations(id),
     qr_code VARCHAR(500) NOT NULL UNIQUE, -- payload hoặc URL
-    qr_image_url TEXT, -- URL image QR trong object storage
+    qr_image_url TEXT, -- URL image QR trong Cloudinary
     status VARCHAR(50) DEFAULT 'ACTIVE', -- ACTIVE, USED, EXPIRED, CANCELLED
     generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     used_at TIMESTAMP,
@@ -2120,13 +2120,13 @@ begin_transaction
 
 ### 8.3 QR Code Generation Strategy
 
-**Quyết định**: Generate QR khi registration CONFIRMED, lưu image vào object storage.
+**Quyết định**: Generate QR khi registration CONFIRMED, lưu image vào Cloudinary.
 
 **Quy trình:**
 
 1. Registration Service gọi QR Service
 2. QR Service tạo payload: `{registration_id, timestamp, hash}`
-3. Tạo QR image, upload S3
+3. Tạo QR image, upload Cloudinary
 4. Return QR URL, lưu vào Ticket table
 5. Client download/display QR
 
