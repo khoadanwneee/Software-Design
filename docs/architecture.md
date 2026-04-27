@@ -14,7 +14,7 @@ Kiến trúc tuân theo các nguyên tắc:
 
 - **Cloud-native**: Có khả năng scale ngang, mở rộng dễ dàng.
 - **Modular services / Microservices-ready**: Các module/service có trách nhiệm rõ ràng; MVP có thể triển khai modular monolith, sau đó tách service khi cần scale.
-- **Event-driven**: Xử lý bất đồng bộ thông qua message broker.
+- **Event-driven**: Xử lý bất đồng bộ thông qua RabbitMQ.
 - **API-first**: Giao tiếp qua REST/WebSocket.
 - **Database per service**: Dữ liệu được phân chia phù hợp.
 
@@ -69,18 +69,18 @@ graph TB
 
 ### Giải thích các thành phần:
 
-| Thành phần              | Vai trò                                             | Tương tác chính                                           |
-| ----------------------- | --------------------------------------------------- | --------------------------------------------------------- |
-| **Sinh viên**           | User chính sử dụng app/web để xem, đăng ký, quản lý vé | Xem danh sách/chi tiết, đăng ký, thanh toán, xem QR, nhận thông báo |
-| **Ban tổ chức**         | Admin tạo, cập nhật, hủy workshop và xem thống kê   | Quản lý workshop, upload PDF, theo dõi dashboard, export báo cáo |
-| **Nhân sự check-in**    | Sử dụng mobile app để quét QR, hỗ trợ offline       | Quét QR, ghi nhận check-in, đồng bộ dữ liệu khi có mạng   |
-| **School Auth / LDAP**  | Hệ thống xác thực tài khoản trường                  | Xác thực email/MSSV, hỗ trợ provisioning user             |
-| **Legacy Student Info** | Hệ thống tích hợp cung cấp thông tin sinh viên      | Cung cấp tên, email, khóa, ngành học để xác thực profile  |
-| **Payment Gateway**     | Xử lý thanh toán/refund cho workshop có phí         | Nhận charge/refund request, gửi webhook callback, hỗ trợ reconciliation |
-| **Email Service**       | Gửi thông báo email                                 | Gửi xác nhận đăng ký, reminder, thay đổi/hủy workshop     |
-| **Push Notification**   | Gửi push notification                               | Gửi reminder, workshop changed/cancelled, kết quả check-in |
-| **SMS / Chat Provider** | Kênh thông báo mở rộng                              | Gửi SMS/Telegram/Zalo theo preference của sinh viên       |
-| **LLM / AI Summary**    | Dịch vụ AI tóm tắt PDF                              | Nhận text đã extract từ PDF, trả về summary tiếng Việt    |
+| Thành phần              | Vai trò                                                | Tương tác chính                                                         |
+| ----------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| **Sinh viên**           | User chính sử dụng app/web để xem, đăng ký, quản lý vé | Xem danh sách/chi tiết, đăng ký, thanh toán, xem QR, nhận thông báo     |
+| **Ban tổ chức**         | Admin tạo, cập nhật, hủy workshop và xem thống kê      | Quản lý workshop, upload PDF, theo dõi dashboard, export báo cáo        |
+| **Nhân sự check-in**    | Sử dụng mobile app để quét QR, hỗ trợ offline          | Quét QR, ghi nhận check-in, đồng bộ dữ liệu khi có mạng                 |
+| **School Auth / LDAP**  | Hệ thống xác thực tài khoản trường                     | Xác thực email/MSSV, hỗ trợ provisioning user                           |
+| **Legacy Student Info** | Hệ thống tích hợp cung cấp thông tin sinh viên         | Cung cấp tên, email, khóa, ngành học để xác thực profile                |
+| **Payment Gateway**     | Xử lý thanh toán/refund cho workshop có phí            | Nhận charge/refund request, gửi webhook callback, hỗ trợ reconciliation |
+| **Email Service**       | Gửi thông báo email                                    | Gửi xác nhận đăng ký, reminder, thay đổi/hủy workshop                   |
+| **Push Notification**   | Gửi push notification                                  | Gửi reminder, workshop changed/cancelled, kết quả check-in              |
+| **SMS / Chat Provider** | Kênh thông báo mở rộng                                 | Gửi SMS/Telegram/Zalo theo preference của sinh viên                     |
+| **LLM / AI Summary**    | Dịch vụ AI tóm tắt PDF                                 | Nhận text đã extract từ PDF, trả về summary tiếng Việt                  |
 
 ---
 
@@ -122,7 +122,7 @@ graph TB
     end
 
     subgraph integration["Integration & Async Layer"]
-        MessageBroker["Message Broker<br/>(RabbitMQ/Kafka)"]
+        MessageBroker["RabbitMQ<br/>(Message Broker)"]
         JobQueue["Background Job Queue"]
         EventBus["Event Schema & Routing"]
     end
@@ -245,49 +245,49 @@ graph TB
 
 #### **Business Service Layer**
 
-| Container                     | Công nghệ                | Mô tả                                                                                                               |
-| ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| **Workshop Service**          | Node.js                  | Quản lý workshop, session, speaker, room, file PDF, trạng thái draft/published/cancelled. Validate room/time conflict và publish event khi workshop thay đổi. |
-| **Registration Service**      | Node.js                  | Xử lý đăng ký miễn phí/có phí: kiểm tra sức chứa, idempotency, lock ghế, tạo registration/ticket sau khi đủ điều kiện. |
-| **Payment Service**           | Node.js                  | Tạo payment intent/order, gọi payment gateway, verify webhook signature, cập nhật payment state. |
-| **Refund & Reconciliation Worker** | Node.js             | Xử lý refund async khi workshop bị hủy và đối soát định kỳ với payment gateway. |
-| **Notification Service**      | Node.js                  | Consume event từ broker, render template, đọc preference, gửi email/push/SMS/chat theo channel abstraction. Có retry/throttling. |
-| **Check-in Service**          | Node.js                  | Xác thực QR, kiểm tra expiry/used status, ghi nhận check-in online, publish check-in event. |
-| **Check-in Sync Service**     | Node.js                  | Nhận batch sync offline từ mobile app, kiểm tra conflict/duplicate, ghi nhận check-in vào DB. |
-| **QR Code Service**           | Node.js                  | Tạo QR code/ticket, lưu ảnh QR vào Cloudinary, expose URL/download QR. |
-| **AI Summary Worker**         | Python FastAPI/Celery    | Consume `pdf_uploaded`, extract text từ PDF, gọi LLM để tóm tắt, lưu AISummary. |
-| **Reporting / Analytics Service** | Node.js              | Cung cấp dashboard, show-up rate, revenue, no-show, export Excel/CSV dựa trên read model. |
-| **Realtime Seat Service**     | Node.js                  | Quản lý WebSocket/SSE subscription và broadcast `seat.updated` cho danh sách/chi tiết workshop. |
+| Container                          | Công nghệ             | Mô tả                                                                                                                                                         |
+| ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workshop Service**               | Node.js               | Quản lý workshop, session, speaker, room, file PDF, trạng thái draft/published/cancelled. Validate room/time conflict và publish event khi workshop thay đổi. |
+| **Registration Service**           | Node.js               | Xử lý đăng ký miễn phí/có phí: kiểm tra sức chứa, idempotency, lock ghế, tạo registration/ticket sau khi đủ điều kiện.                                        |
+| **Payment Service**                | Node.js               | Tạo payment intent/order, gọi payment gateway, verify webhook signature, cập nhật payment state.                                                              |
+| **Refund & Reconciliation Worker** | Node.js               | Xử lý refund async khi workshop bị hủy và đối soát định kỳ với payment gateway.                                                                               |
+| **Notification Service**           | Node.js               | Consume event từ broker, render template, đọc preference, gửi email/push/SMS/chat theo channel abstraction. Có retry/throttling.                              |
+| **Check-in Service**               | Node.js               | Xác thực QR, kiểm tra expiry/used status, ghi nhận check-in online, publish check-in event.                                                                   |
+| **Check-in Sync Service**          | Node.js               | Nhận batch sync offline từ mobile app, kiểm tra conflict/duplicate, ghi nhận check-in vào DB.                                                                 |
+| **QR Code Service**                | Node.js               | Tạo QR code/ticket, lưu ảnh QR vào Cloudinary, expose URL/download QR.                                                                                        |
+| **AI Summary Worker**              | Python FastAPI/Celery | Consume `pdf_uploaded`, extract text từ PDF, gọi LLM để tóm tắt, lưu AISummary.                                                                               |
+| **Reporting / Analytics Service**  | Node.js               | Cung cấp dashboard, show-up rate, revenue, no-show, export Excel/CSV dựa trên read model.                                                                     |
+| **Realtime Seat Service**          | Node.js               | Quản lý WebSocket/SSE subscription và broadcast `seat.updated` cho danh sách/chi tiết workshop.                                                               |
 
 #### **Data Layer**
 
-| Container          | Công nghệ                    | Mô tả                                                                                                         |
-| ------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **PostgreSQL**     | PostgreSQL 14+               | Lưu trữ transactional data: users, workshops, registrations, payments/refunds, check-ins, notifications, AI summaries, audit logs. |
-| **Redis**          | Redis 7+                     | Cache seat availability, session JWT, notification preferences, AI summary cache, distributed lock cho registration/check-in. |
-| **File & Image Delivery** | Cloudinary | Lưu ảnh workshop, tài liệu PDF, sơ đồ phòng, QR code, export reports với CDN toàn cầu. |
-| **Elasticsearch**  | Elasticsearch/OpenSearch     | Optional full-text search cho workshop name/description/category. |
-| **Analytics Read Model** | PostgreSQL materialized view / OLAP | Pre-computed metrics cho dashboard, export và báo cáo sau sự kiện. |
+| Container                 | Công nghệ                           | Mô tả                                                                                                                              |
+| ------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **PostgreSQL**            | PostgreSQL 14+                      | Lưu trữ transactional data: users, workshops, registrations, payments/refunds, check-ins, notifications, AI summaries, audit logs. |
+| **Redis**                 | Redis 7+                            | Cache seat availability, session JWT, notification preferences, AI summary cache, distributed lock cho registration/check-in.      |
+| **File & Image Delivery** | Cloudinary                          | Lưu ảnh workshop, tài liệu PDF, sơ đồ phòng, QR code, export reports với CDN toàn cầu.                                             |
+| **Elasticsearch**         | Elasticsearch/OpenSearch            | Optional full-text search cho workshop name/description/category.                                                                  |
+| **Analytics Read Model**  | PostgreSQL materialized view / OLAP | Pre-computed metrics cho dashboard, export và báo cáo sau sự kiện.                                                                 |
 
 #### **Integration & Async Layer**
 
-| Container          | Công nghệ      | Mô tả                                                                                                                                 |
-| ------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **Message Broker** | RabbitMQ/Kafka | Event pub/sub: registration.created, payment.completed, refund.completed, checkin.recorded, workshop.updated/cancelled, pdf_uploaded, summary_done. Cho phép retry, dead-letter. |
-| **Background Job Queue** | RabbitMQ/Celery/SQS | Chạy job dài: PDF processing, refund, reconciliation, batch reporting. |
-| **Event Bus**      | Trong broker   | Định nghĩa event schema, routing rule, versioning và idempotency key. |
+| Container                | Công nghệ           | Mô tả                                                                                                                                                                            |
+| ------------------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Message Broker** | RabbitMQ | Event pub/sub: registration.created, payment.completed, refund.completed, checkin.recorded, workshop.updated/cancelled, pdf_uploaded, summary_done. Cho phép retry, dead-letter. |
+| **Background Job Queue** | RabbitMQ | Chạy job dài: PDF processing, refund, reconciliation, batch reporting. |
+| **Event Bus**            | Trong broker        | Định nghĩa event schema, routing rule, versioning và idempotency key.                                                                                                            |
 
 #### **External Services Integration**
 
-| Service                   | Giao thức                      | Mô tả                                                                    |
-| ------------------------- | ------------------------------ | ------------------------------------------------------------------------ |
-| **School Auth / LDAP**    | OAuth2/LDAP/SAML               | Xác thực tài khoản trường bằng email/MSSV. |
-| **Legacy Student System** | REST API                       | Fetch student info: name, email, class, major. Cache result trong Redis. |
-| **Payment Gateway**       | REST API webhook               | Charge, refund, callback, reconciliation, verify signature. |
-| **Email Service**         | SMTP/API (SendGrid)            | Gửi email transactional (xác nhận đăng ký, reminder, workshop changed/cancelled). |
-| **Push Notification**     | Firebase Cloud Messaging (FCM) | Gửi push notification, handle token refresh. |
-| **SMS / Chat Provider**   | Twilio/Zalo/Telegram API       | Kênh thông báo mở rộng theo notification preference. |
-| **LLM / AI Summary Service** | REST API/gRPC               | Tạo tóm tắt tiếng Việt từ nội dung PDF đã extract. |
+| Service                      | Giao thức                      | Mô tả                                                                             |
+| ---------------------------- | ------------------------------ | --------------------------------------------------------------------------------- |
+| **School Auth / LDAP**       | OAuth2/LDAP/SAML               | Xác thực tài khoản trường bằng email/MSSV.                                        |
+| **Legacy Student System**    | REST API                       | Fetch student info: name, email, class, major. Cache result trong Redis.          |
+| **Payment Gateway**          | REST API webhook               | Charge, refund, callback, reconciliation, verify signature.                       |
+| **Email Service**            | SMTP/API (SendGrid)            | Gửi email transactional (xác nhận đăng ký, reminder, workshop changed/cancelled). |
+| **Push Notification**        | Firebase Cloud Messaging (FCM) | Gửi push notification, handle token refresh.                                      |
+| **SMS / Chat Provider**      | Twilio/Zalo/Telegram API       | Kênh thông báo mở rộng theo notification preference.                              |
+| **LLM / AI Summary Service** | REST API/gRPC                  | Tạo tóm tắt tiếng Việt từ nội dung PDF đã extract.                                |
 
 ---
 
@@ -331,8 +331,8 @@ graph LR
     end
 
     subgraph Events["Async Layer"]
-        Broker["Message Broker<br/>RabbitMQ/Kafka"]
-        Jobs["Background Job Queue"]
+        Broker["RabbitMQ<br/>(Message Broker)"]
+        Jobs["RabbitMQ Job Queue"]
     end
 
     subgraph External["External"]
@@ -433,7 +433,7 @@ sequenceDiagram
     participant Cache as Redis
     participant DB as PostgreSQL
     participant Storage as Cloudinary
-    participant Broker as Message Broker
+    participant Broker as RabbitMQ
     participant NotifSvc as Notification Service
     participant EmailSvc as Email Service
 
@@ -497,7 +497,7 @@ sequenceDiagram
     participant QRSvc as QR Service
     participant DB as PostgreSQL
     participant Cache as Redis
-    participant Broker as Message Broker
+    participant Broker as RabbitMQ
     participant NotifSvc as Notification Service
     participant EmailSvc as Email Service
 
@@ -695,10 +695,10 @@ sequenceDiagram
     participant WorkshopSvc as Workshop Service
     participant DB as PostgreSQL
     participant Storage as Cloudinary
-    participant Jobs as Job Queue
+    participant Jobs as RabbitMQ Job Queue
     participant AIWorker as AI Summary Worker
     participant LLM as LLM Service
-    participant Broker as Message Broker
+    participant Broker as RabbitMQ
     participant NotifSvc as Notification Service
 
     Organizer->>AdminWeb: Tạo/cập nhật workshop, chọn phòng/giờ, upload PDF
@@ -745,7 +745,7 @@ sequenceDiagram
     participant API as API Gateway
     participant WorkshopSvc as Workshop Service
     participant DB as PostgreSQL
-    participant Broker as Message Broker
+    participant Broker as RabbitMQ
     participant NotifSvc as Notification Service
     participant RefundWorker as Refund Worker
     participant PaymentGW as Payment Gateway
@@ -1028,14 +1028,14 @@ sequenceDiagram
 
 ### 6.1 Phân Loại Dữ Liệu
 
-| Loại dữ liệu                                                             | Đặc điểm                                | Database                        | Lý do                                  |
-| ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------- | -------------------------------------- |
-| **Transactional** (users, workshops, registrations, payments, refunds, check-ins, summaries) | ACID, relational, high consistency | PostgreSQL | Strong ACID guarantee, complex queries |
-| **Cache** (seat availability, session, locks, preferences, summary cache) | Ephemeral, fast access, high throughput | Redis | In-memory, atomic operations, TTL |
-| **Files** (QR images, room layouts, PDF materials, report exports) | Unstructured, large size | Cloudinary | Auto-optimized, CDN-friendly, integrated transformation |
-| **Events/Jobs** (registration, payment, refund, PDF processing, notification) | Async, durable, retryable | Message Broker / Job Queue | Guarantees delivery, supports replay and DLQ |
-| **Search** (workshop fulltext search, filtering) | Optional, fulltext index | Elasticsearch (optional) | Fast search, aggregation |
-| **Analytics Read Model** (dashboard metrics, exports) | Precomputed/read-heavy | Materialized views / OLAP | Avoid heavy analytical load on OLTP tables |
+| Loại dữ liệu                                                                                 | Đặc điểm                                | Database                   | Lý do                                                   |
+| -------------------------------------------------------------------------------------------- | --------------------------------------- | -------------------------- | ------------------------------------------------------- |
+| **Transactional** (users, workshops, registrations, payments, refunds, check-ins, summaries) | ACID, relational, high consistency      | PostgreSQL                 | Strong ACID guarantee, complex queries                  |
+| **Cache** (seat availability, session, locks, preferences, summary cache)                    | Ephemeral, fast access, high throughput | Redis                      | In-memory, atomic operations, TTL                       |
+| **Files** (QR images, room layouts, PDF materials, report exports)                           | Unstructured, large size                | Cloudinary                 | Auto-optimized, CDN-friendly, integrated transformation |
+| **Events/Jobs** (registration, payment, refund, PDF processing, notification)                | Async, durable, retryable               | Message Broker / Job Queue | Guarantees delivery, supports replay and DLQ            |
+| **Search** (workshop fulltext search, filtering)                                             | Optional, fulltext index                | Elasticsearch (optional)   | Fast search, aggregation                                |
+| **Analytics Read Model** (dashboard metrics, exports)                                        | Precomputed/read-heavy                  | Materialized views / OLAP  | Avoid heavy analytical load on OLTP tables              |
 
 ### 6.2 Đề Xuất Loại Database
 
@@ -2448,25 +2448,25 @@ POST /payments/webhook
 
 ## 11. Technology Stack Summary
 
-| Component             | Technology                                    | Reason                               |
-| --------------------- | --------------------------------------------- | ------------------------------------ |
-| **Frontend**          | React 18 + Next.js                            | SSR, fast development, good SEO      |
-| **Mobile**            | Flutter                                       | Cross-platform, good offline support |
-| **Backend API**       | Node.js                                       | Scalable, mature ecosystem           |
-| **Authentication**    | JWT + OAuth2                                  | Stateless, easy to scale             |
-| **Database**          | PostgreSQL 14+                                | ACID, relational, mature             |
-| **Cache**             | Redis 7+                                      | In-memory, atomic ops, pub/sub       |
-| **Object Storage**    | S3-compatible (AWS S3 or MinIO)               | Scalable, CDN-friendly               |
-| **Message Broker**    | RabbitMQ hoặc Apache Kafka                    | Event-driven, guaranteed delivery    |
-| **API Gateway**       | Kong hoặc Nginx                               | Rate limit, auth, routing            |
-| **Payment Gateway**   | VNPay / Stripe / 2Checkout                    | Payment processing                   |
-| **Email Service**     | SendGrid / Mailgun                            | Transactional email                  |
-| **Push Notification** | Firebase Cloud Messaging (FCM)                | Cross-platform push                  |
+| Component             | Technology                                    | Reason                                   |
+| --------------------- | --------------------------------------------- | ---------------------------------------- |
+| **Frontend**          | React 18 + Next.js                            | SSR, fast development, good SEO          |
+| **Mobile**            | Flutter                                       | Cross-platform, good offline support     |
+| **Backend API**       | Node.js                                       | Scalable, mature ecosystem               |
+| **Authentication**    | JWT + OAuth2                                  | Stateless, easy to scale                 |
+| **Database**          | PostgreSQL 14+                                | ACID, relational, mature                 |
+| **Cache**             | Redis 7+                                      | In-memory, atomic ops, pub/sub           |
+| **Object Storage**    | S3-compatible (AWS S3 or MinIO)               | Scalable, CDN-friendly                   |
+| **Message Broker**    | RabbitMQ hoặc Apache Kafka                    | Event-driven, guaranteed delivery        |
+| **API Gateway**       | Kong hoặc Nginx                               | Rate limit, auth, routing                |
+| **Payment Gateway**   | VNPay / Stripe / 2Checkout                    | Payment processing                       |
+| **Email Service**     | SendGrid / Mailgun                            | Transactional email                      |
+| **Push Notification** | Firebase Cloud Messaging (FCM)                | Cross-platform push                      |
 | **AI Service**        | Python FastAPI/Celery + external LLM API      | PDF extraction và workshop summarization |
-| **Monitoring**        | Prometheus + Grafana                          | Infrastructure monitoring            |
-| **Logging**           | ELK Stack (Elasticsearch + Logstash + Kibana) | Centralized logging                  |
-| **CI/CD**             | GitHub Actions / GitLab CI                    | Automation                           |
-| **Container**         | Docker + Kubernetes (optional)                | Containerization, orchestration      |
+| **Monitoring**        | Prometheus + Grafana                          | Infrastructure monitoring                |
+| **Logging**           | ELK Stack (Elasticsearch + Logstash + Kibana) | Centralized logging                      |
+| **CI/CD**             | GitHub Actions / GitLab CI                    | Automation                               |
+| **Container**         | Docker + Kubernetes (optional)                | Containerization, orchestration          |
 
 ---
 

@@ -31,8 +31,8 @@ Kiến trúc được thiết kế theo hướng thực tế, phù hợp để s
 | CSV Import Service                   | Batch job chạy ban đêm để import dữ liệu từ CSV, validate từng dòng, ghi log lỗi, hỗ trợ chạy lại an toàn. Đây là yêu cầu bổ sung của đề bài hiện tại.           |
 | Database                             | PostgreSQL lưu dữ liệu giao dịch chính: users, workshops, registrations, payments, QR tickets, check-ins, notifications, AI data, CSV import logs và audit logs. |
 | Cache                                | Redis dùng cho session/token blacklist, cache số chỗ còn lại, distributed lock, rate limit và cache ngắn hạn.                                                    |
-| Message Broker                       | RabbitMQ hoặc job queue tương đương dùng cho notification, payment events, offline sync, AI jobs, CSV import và reporting.                                       |
-| Cloudinary                       | Lưu file PDF, ảnh workshop, sơ đồ phòng, QR image, file CSV import và report export. Hỗ trợ CDN toàn cầu, auto-optimization và xử lý ảnh.                                                                             |
+| RabbitMQ | Message Broker & Job Queue dùng cho notification, payment events, offline sync, AI jobs, CSV import và reporting. |
+| Cloudinary                           | Lưu file PDF, ảnh workshop, sơ đồ phòng, QR image, file CSV import và report export. Hỗ trợ CDN toàn cầu, auto-optimization và xử lý ảnh.                        |
 | Legacy System                        | Hệ thống sinh viên hiện hữu hoặc LDAP/SSO của trường, dùng để xác thực hoặc lấy profile sinh viên.                                                               |
 | Payment Gateway                      | Cổng thanh toán như VNPay, MoMo, Stripe. Hệ thống chỉ tin webhook/callback đã xác thực chữ ký.                                                                   |
 | Email/App Notification Provider      | Dịch vụ gửi email, push notification, SMS hoặc Telegram.                                                                                                         |
@@ -68,7 +68,7 @@ flowchart LR
     subgraph Data["Data & Infrastructure"]
         DB["PostgreSQL<br/>Core transactional database"]
         Redis["Redis<br/>Seat cache, locks, sessions"]
-        Broker["Message Broker / Job Queue"]
+        Broker["RabbitMQ<br/>Message Broker & Job Queue"]
         Storage["Cloudinary<br/>PDF, CSV, QR, room layout"]
     end
 
@@ -179,7 +179,7 @@ Trước sự kiện, Check-in Mobile App có thể preload danh sách QR/regist
 
 **Notification**
 
-Các module nghiệp vụ không gửi email/push trực tiếp. Khi có sự kiện như registration.confirmed, payment.completed, workshop.updated, workshop.cancelled hoặc checkin.recorded, module publish event vào Message Broker. Notification Service consume event, đọc template và preference, gửi qua provider phù hợp, ghi log từng lần gửi và retry khi thất bại.
+Các module nghiệp vụ không gửi email/push trực tiếp. Khi có sự kiện như registration.confirmed, payment.completed, workshop.updated, workshop.cancelled hoặc checkin.recorded, module publish event vào RabbitMQ. Notification Service consume event, đọc template và preference, gửi qua provider phù hợp, ghi log từng lần gửi và retry khi thất bại.
 
 **AI recommendation**
 

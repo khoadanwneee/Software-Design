@@ -69,9 +69,9 @@ Cloudinary được sử dụng để lưu trữ và quản lý file:
 
 Không nên lưu file lớn trực tiếp trong PostgreSQL vì làm database nặng và khó backup/scale.
 
-### Message Broker / Job Queue
+### RabbitMQ cho async events
 
-RabbitMQ, Kafka hoặc một job queue đơn giản hơn dùng cho:
+RabbitMQ nên dùng cho xử lý bất đồng bộ:
 
 - Gửi notification.
 - Xử lý PDF và AI summary.
@@ -79,12 +79,6 @@ RabbitMQ, Kafka hoặc một job queue đơn giản hơn dùng cho:
 - Payment reconciliation/refund.
 - CSV import ban đêm.
 - Reporting snapshot.
-
-Với bài tập sinh viên, RabbitMQ hoặc BullMQ/Redis Queue là đủ thực tế. Nếu muốn giảm vận hành, có thể bắt đầu bằng job queue trong cùng backend và tách broker sau.
-
-### Vector database
-
-Chưa cần vector database trong MVP. AI recommendation có thể bắt đầu bằng rule-based hoặc scoring đơn giản dựa trên tag, ngành học, lịch sử đăng ký và độ phổ biến. Chỉ cân nhắc vector database khi cần semantic search trên mô tả workshop, PDF hoặc hồ sơ sở thích tự do.
 
 ## 2.3 ERD bằng Mermaid
 
