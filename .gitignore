@@ -1,3 +1,22 @@
 # Ignore auction-web folder
 auction-web/
 UML/
+
+# Node / monorepo
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+.pnpm-store/
+
+# Env / generated
+.env
+.env.*
+!.env.example
+*.log
+tmp/
+uploads/
+
+# Prisma generated caches
+packages/db/node_modules/.prisma/

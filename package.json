@@ -1,0 +1,29 @@
+{
+  "name": "unihub-workshop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "db:generate": "corepack pnpm --filter @unihub/db prisma:generate",
+    "db:migrate": "corepack pnpm --filter @unihub/db prisma:migrate",
+    "db:seed": "corepack pnpm --filter @unihub/db db:seed",
+    "compose:up": "docker compose -f infra/compose.yaml up -d",
+    "compose:down": "docker compose -f infra/compose.yaml down",
+    "compose:reset": "docker compose -f infra/compose.yaml down -v"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript-eslint": "^8.18.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "UniHub Workshop",
+  "short_name": "UniHub",
+  "description": "Student, admin, and check-in PWA for UniHub Workshop.",
+  "start_url": "/workshops",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#155e75",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

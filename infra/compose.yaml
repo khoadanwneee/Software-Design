@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: unihub-postgres
+    environment:
+      POSTGRES_USER: unihub
+      POSTGRES_PASSWORD: unihub
+      POSTGRES_DB: unihub_workshop
+    ports:
+      - "5432:5432"
+    volumes:
+      - unihub-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unihub -d unihub_workshop"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: unihub-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - unihub-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: unihub-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  unihub-postgres-data:
+  unihub-redis-data:

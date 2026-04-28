@@ -1,0 +1,39 @@
+{
+  "name": "@unihub/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src prisma --ext .ts",
+    "test": "vitest run --passWithNoTests",
+    "prisma:generate": "dotenv -e ../../.env prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate": "dotenv -e ../../.env prisma migrate dev --schema prisma/schema.prisma",
+    "db:seed": "dotenv -e ../../.env tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "dotenv-cli": "^11.0.0",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

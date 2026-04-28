@@ -1,0 +1,447 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  ORGANIZER
+  CHECKIN_STAFF
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+  PENDING_VERIFICATION
+}
+
+enum WorkshopStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+enum RegistrationStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PAYMENT_FAILED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  INIT_FAILED
+  REFUND_PENDING
+  REFUNDED
+  NEEDS_MANUAL_REVIEW
+}
+
+enum QrTokenStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  REVOKED
+}
+
+enum OfflineSyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+  DUPLICATE
+  CONFLICT
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  TELEGRAM
+}
+
+enum AiSummaryStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum StudentImportStatus {
+  PENDING
+  RUNNING
+  DONE
+  DONE_WITH_ERRORS
+  FAILED
+}
+
+model User {
+  id              String              @id @default(cuid())
+  email           String              @unique
+  passwordHash    String              @map("password_hash")
+  fullName        String              @map("full_name")
+  roles           Role[]              @default([STUDENT])
+  status          UserStatus          @default(ACTIVE)
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  studentProfile  StudentProfile?
+  createdWorkshops Workshop[]         @relation("WorkshopCreator")
+  registrations   Registration[]
+  checkins         Checkin[]          @relation("CheckinStaff")
+  notifications    Notification[]
+  uploadedAiDocs   AiDocument[]       @relation("AiDocumentUploader")
+  importRuns       StudentImportRun[] @relation("StudentImportCreator")
+  auditLogs        AuditLog[]         @relation("AuditActor")
+
+  @@map("users")
+}
+
+model StudentProfile {
+  id          String   @id @default(cuid())
+  userId      String?  @unique @map("user_id")
+  studentCode String   @unique @map("student_code")
+  email       String   @unique
+  fullName    String   @map("full_name")
+  major       String?
+  className   String?  @map("class_name")
+  verifiedAt  DateTime? @map("verified_at")
+  importedAt  DateTime? @map("imported_at")
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([studentCode])
+  @@index([major])
+  @@map("student_profiles")
+}
+
+model Room {
+  id         String     @id @default(cuid())
+  name       String     @unique
+  capacity   Int
+  layoutUrl  String?    @map("layout_url")
+  status     String     @default("ACTIVE")
+  workshops  Workshop[]
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  @@index([capacity])
+  @@map("rooms")
+}
+
+model Speaker {
+  id          String            @id @default(cuid())
+  fullName    String            @map("full_name")
+  title       String?
+  bio         String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  workshopLinks WorkshopSpeaker[]
+
+  @@index([fullName])
+  @@map("speakers")
+}
+
+model Workshop {
+  id              String             @id @default(cuid())
+  slug            String             @unique
+  title           String
+  description     String
+  category        String
+  roomId          String             @map("room_id")
+  createdById     String             @map("created_by_id")
+  startTime       DateTime           @map("start_time")
+  endTime         DateTime           @map("end_time")
+  capacity        Int
+  registeredCount Int                @default(0) @map("registered_count")
+  priceAmount     Decimal            @default(0) @map("price_amount") @db.Decimal(12, 2)
+  currency        String             @default("VND")
+  status          WorkshopStatus     @default(DRAFT)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  cancelledAt     DateTime?          @map("cancelled_at")
+  room            Room               @relation(fields: [roomId], references: [id])
+  createdBy       User               @relation("WorkshopCreator", fields: [createdById], references: [id])
+  speakerLinks    WorkshopSpeaker[]
+  registrations   Registration[]
+  checkins        Checkin[]
+  syncLogs        OfflineCheckinSyncLog[]
+  notifications   Notification[]
+  aiDocuments     AiDocument[]
+  aiSummaries     AiSummary[]
+
+  @@index([startTime])
+  @@index([roomId, startTime, endTime])
+  @@index([status, category])
+  @@map("workshops")
+}
+
+model WorkshopSpeaker {
+  id          String   @id @default(cuid())
+  workshopId  String   @map("workshop_id")
+  speakerId   String   @map("speaker_id")
+  workshop    Workshop @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  speaker     Speaker  @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+
+  @@unique([workshopId, speakerId])
+  @@index([speakerId])
+  @@map("workshop_speakers")
+}
+
+model Registration {
+  id             String             @id @default(cuid())
+  userId         String             @map("user_id")
+  workshopId     String             @map("workshop_id")
+  status         RegistrationStatus @default(CONFIRMED)
+  idempotencyKey String?            @unique @map("idempotency_key")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  user           User               @relation(fields: [userId], references: [id])
+  workshop       Workshop           @relation(fields: [workshopId], references: [id])
+  payment        Payment?
+  qrToken        QrToken?
+
+  @@unique([userId, workshopId])
+  @@index([workshopId, status])
+  @@index([userId])
+  @@map("registrations")
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  registrationId        String        @unique @map("registration_id")
+  idempotencyKey        String        @unique @map("idempotency_key")
+  provider              String        @default("mock")
+  providerOrderId       String?       @map("provider_order_id")
+  providerTransactionId String?       @unique @map("provider_transaction_id")
+  status                PaymentStatus @default(PENDING)
+  amount                Decimal       @db.Decimal(12, 2)
+  currency              String        @default("VND")
+  paymentUrl            String?       @map("payment_url")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+  registration          Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  callbacks             PaymentCallback[]
+
+  @@index([status])
+  @@index([providerOrderId])
+  @@map("payments")
+}
+
+model PaymentCallback {
+  id                    String   @id @default(cuid())
+  paymentId             String?  @map("payment_id")
+  provider              String
+  providerEventId       String   @map("provider_event_id")
+  providerTransactionId String?  @map("provider_transaction_id")
+  validSignature        Boolean  @map("valid_signature")
+  payload               Json
+  receivedAt            DateTime @default(now()) @map("received_at")
+  payment               Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerEventId])
+  @@index([providerTransactionId])
+  @@index([receivedAt])
+  @@map("payment_callbacks")
+}
+
+model IdempotencyKey {
+  id           String   @id @default(cuid())
+  key          String
+  scope        String
+  requestHash  String   @map("request_hash")
+  responseJson Json?    @map("response_json")
+  statusCode   Int?     @map("status_code")
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model QrToken {
+  id             String        @id @default(cuid())
+  registrationId String        @unique @map("registration_id")
+  tokenHash      String        @unique @map("token_hash")
+  tokenPreview   String        @map("token_preview")
+  status         QrTokenStatus @default(ACTIVE)
+  expiresAt      DateTime?     @map("expires_at")
+  usedAt         DateTime?     @map("used_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  registration   Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  checkin        Checkin?
+
+  @@index([status])
+  @@index([expiresAt])
+  @@map("qr_tokens")
+}
+
+model Checkin {
+  id              String    @id @default(cuid())
+  qrTokenId       String    @unique @map("qr_token_id")
+  workshopId      String    @map("workshop_id")
+  staffId         String    @map("staff_id")
+  idempotencyKey  String?   @unique @map("idempotency_key")
+  clientCheckinId String?   @map("client_checkin_id")
+  deviceId        String?   @map("device_id")
+  checkedInAt     DateTime  @default(now()) @map("checked_in_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  qrToken         QrToken   @relation(fields: [qrTokenId], references: [id])
+  workshop        Workshop  @relation(fields: [workshopId], references: [id])
+  staff           User      @relation("CheckinStaff", fields: [staffId], references: [id])
+  syncLogs        OfflineCheckinSyncLog[]
+
+  @@index([workshopId, checkedInAt])
+  @@index([staffId])
+  @@map("checkins")
+}
+
+model OfflineCheckinSyncLog {
+  id              String            @id @default(cuid())
+  clientCheckinId String            @map("client_checkin_id")
+  deviceId        String            @map("device_id")
+  workshopId      String            @map("workshop_id")
+  staffId         String            @map("staff_id")
+  qrPayloadHash   String            @map("qr_payload_hash")
+  syncStatus      OfflineSyncStatus @map("sync_status")
+  checkinId       String?           @map("checkin_id")
+  errorCode       String?           @map("error_code")
+  errorMessage    String?           @map("error_message")
+  syncedAt        DateTime?         @map("synced_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  workshop        Workshop          @relation(fields: [workshopId], references: [id])
+  checkin         Checkin?          @relation(fields: [checkinId], references: [id])
+
+  @@unique([deviceId, clientCheckinId])
+  @@index([syncStatus])
+  @@index([workshopId])
+  @@map("offline_checkin_sync_logs")
+}
+
+model Notification {
+  id          String              @id @default(cuid())
+  userId      String              @map("user_id")
+  workshopId  String?             @map("workshop_id")
+  channel     NotificationChannel
+  eventType   String              @map("event_type")
+  title       String
+  body        String
+  status      NotificationStatus  @default(PENDING)
+  dedupeKey   String              @unique @map("dedupe_key")
+  retryCount  Int                 @default(0) @map("retry_count")
+  lastError   String?             @map("last_error")
+  sentAt      DateTime?           @map("sent_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+  user        User                @relation(fields: [userId], references: [id])
+  workshop    Workshop?           @relation(fields: [workshopId], references: [id])
+
+  @@index([userId, status])
+  @@index([eventType, createdAt])
+  @@map("notifications")
+}
+
+model AiDocument {
+  id          String    @id @default(cuid())
+  workshopId  String    @map("workshop_id")
+  uploadedById String   @map("uploaded_by_id")
+  fileName    String    @map("file_name")
+  contentType String    @map("content_type")
+  sizeBytes   Int       @map("size_bytes")
+  storageKey  String    @map("storage_key")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  workshop    Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  uploadedBy  User      @relation("AiDocumentUploader", fields: [uploadedById], references: [id])
+  summaries   AiSummary[]
+
+  @@index([workshopId])
+  @@map("ai_documents")
+}
+
+model AiSummary {
+  id           String          @id @default(cuid())
+  workshopId   String          @map("workshop_id")
+  documentId   String          @map("document_id")
+  status       AiSummaryStatus @default(PENDING)
+  summaryText  String?         @map("summary_text")
+  errorMessage String?         @map("error_message")
+  modelVersion String?         @map("model_version")
+  promptVersion String?        @map("prompt_version")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  workshop     Workshop        @relation(fields: [workshopId], references: [id], onDelete: Cascade)
+  document     AiDocument      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([workshopId, documentId])
+  @@index([status])
+  @@map("ai_summaries")
+}
+
+model StudentImportRun {
+  id           String              @id @default(cuid())
+  fileName     String              @map("file_name")
+  fileHash     String              @map("file_hash")
+  importType   String              @default("LEGACY_STUDENT_CSV") @map("import_type")
+  status       StudentImportStatus @default(PENDING)
+  totalRows    Int                 @default(0) @map("total_rows")
+  successRows  Int                 @default(0) @map("success_rows")
+  failedRows   Int                 @default(0) @map("failed_rows")
+  errorMessage String?             @map("error_message")
+  createdById  String?             @map("created_by_id")
+  startedAt    DateTime?           @map("started_at")
+  finishedAt   DateTime?           @map("finished_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  createdBy    User?               @relation("StudentImportCreator", fields: [createdById], references: [id])
+  errors       StudentImportError[]
+
+  @@unique([fileHash, importType])
+  @@index([status])
+  @@map("student_import_runs")
+}
+
+model StudentImportError {
+  id          String           @id @default(cuid())
+  runId       String           @map("run_id")
+  rowNumber   Int              @map("row_number")
+  studentCode String?          @map("student_code")
+  email       String?
+  errorCode   String           @map("error_code")
+  errorMessage String          @map("error_message")
+  rawRow      Json?            @map("raw_row")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  run         StudentImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, rowNumber])
+  @@index([studentCode])
+  @@map("student_import_errors")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?  @map("actor_id")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  oldValue    Json?    @map("old_value")
+  newValue    Json?    @map("new_value")
+  requestId   String?  @map("request_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  actor       User?    @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
