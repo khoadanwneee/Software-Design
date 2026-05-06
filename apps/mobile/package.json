@@ -1,0 +1,28 @@
+{
+  "name": "@unihub/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "dev": "expo start",
+    "build": "expo export --platform android",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "echo \"No tests yet for mobile\""
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/netinfo": "^11.4.1",
+    "@unihub/api-client": "workspace:*",
+    "@unihub/shared-types": "workspace:*",
+    "expo-camera": "~17.0.8",
+    "expo": "^54.0.0",
+    "expo-status-bar": "~3.0.8",
+    "react": "^19.1.0",
+    "react-native": "0.81.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.17",
+    "typescript": "^5.7.2"
+  }
+}

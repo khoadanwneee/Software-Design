@@ -107,9 +107,10 @@ pnpm --filter @unihub/web dev
 Default URLs:
 
 - Web PWA: `http://localhost:5173`
-- API: `http://localhost:4000/api`
-- API docs: `http://localhost:4000/docs`
-- Health: `http://localhost:4000/health`
+- Web PWA: `http://192.168.1.5:5173`
+- API: `http://192.168.1.5:4000/api`
+- API docs: `http://192.168.1.5:4000/docs`
+- Health: `http://192.168.1.5:4000/health`
 - Mailpit: `http://localhost:8025`
 
 ## Demo Accounts
@@ -128,7 +129,7 @@ All seed accounts use password `password123`.
 
 ## PWA Install
 
-On Android Chrome or desktop Chrome/Edge, open `http://localhost:5173`, then use the browser install button. On iOS Safari, use Share → Add to Home Screen. Camera QR scanning requires HTTPS in production; localhost is allowed by browsers for development.
+On Android Chrome or desktop Chrome/Edge, open `http://192.168.1.5:5173`, then use the browser install button. On iOS Safari, use Share → Add to Home Screen. Camera QR scanning requires HTTPS in production; localhost is allowed by browsers for development.
 
 ## Flow Tests
 

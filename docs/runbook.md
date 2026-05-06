@@ -46,9 +46,9 @@ pnpm --filter @unihub/web dev
 ## Health Checks
 
 ```sh
-curl http://localhost:4000/health
-curl http://localhost:4000/health/db
-curl http://localhost:4000/health/redis
+curl http://192.168.1.5:4000/health
+curl http://192.168.1.5:4000/health/db
+curl http://192.168.1.5:4000/health/redis
 ```
 
 ## Payment Mock Webhook
@@ -56,7 +56,7 @@ curl http://localhost:4000/health/redis
 After creating a paid registration, copy `providerOrderId` from the database or API logs and call:
 
 ```sh
-curl -X POST http://localhost:4000/api/payments/webhook/mock \
+curl -X POST http://192.168.1.5:4000/api/payments/webhook/mock \
   -H "Content-Type: application/json" \
   -d '{"signature":"unihub-dev-signature","providerOrderId":"mock_order_REGISTRATION_ID","providerTransactionId":"txn_001","status":"success"}'
 ```

@@ -4,7 +4,7 @@ import { z } from "zod";
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().default(4000),
-  APP_ORIGIN: z.string().default("http://localhost:5173"),
+  APP_ORIGIN: z.string().default("http://192.168.1.2:5173"),
   DATABASE_URL: z
     .string()
     .min(1)
