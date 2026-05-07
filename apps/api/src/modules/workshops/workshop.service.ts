@@ -1,9 +1,10 @@
-import { AiSummaryStatus, type WorkshopDto } from "@unihub/shared-types";
+import { AiSummaryStatus, type WorkshopDto, type WorkshopListFilters } from "@unihub/shared-types";
 import { ErrorCodes } from "@unihub/shared-utils";
 import { Prisma, WorkshopStatus as PrismaWorkshopStatus } from "@unihub/db";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../common/errors/app-error.js";
 import { publishNotificationJob } from "../notifications/queue.js";
+import { publishWorkshopSeatUpdate } from "./workshop-seat-events.js";
 
 const workshopInclude = {
   room: true,
@@ -47,6 +48,7 @@ export function toWorkshopDto(workshop: WorkshopWithRelations): WorkshopDto {
       id: workshop.room.id,
       name: workshop.room.name,
       capacity: workshop.room.capacity,
+      status: workshop.room.status as WorkshopDto["room"]["status"],
       layoutUrl: workshop.room.layoutUrl
     },
     speakers: workshop.speakerLinks.map((link) => ({
@@ -107,11 +109,42 @@ async function assertRoomAvailable(input: {
   }
 }
 
-export async function listWorkshops(filters: { keyword?: string; category?: string }, includeAllStatuses = false) {
+function dateStart(date: string) {
+  return new Date(`${date}T00:00:00.000`);
+}
+
+function nextDateStart(date: string) {
+  const next = dateStart(date);
+  next.setDate(next.getDate() + 1);
+  return next;
+}
+
+export async function listWorkshops(filters: WorkshopListFilters, includeAllStatuses = false) {
+  const startTime: Prisma.DateTimeFilter<"Workshop"> = {};
+  if (filters.date) {
+    startTime.gte = dateStart(filters.date);
+    startTime.lt = nextDateStart(filters.date);
+  } else {
+    if (filters.fromDate) {
+      startTime.gte = dateStart(filters.fromDate);
+    }
+    if (filters.toDate) {
+      startTime.lt = nextDateStart(filters.toDate);
+    }
+  }
+
   const workshops = await prisma.workshop.findMany({
     where: {
       status: includeAllStatuses ? undefined : PrismaWorkshopStatus.PUBLISHED,
       category: filters.category,
+      roomId: filters.roomId,
+      startTime: Object.keys(startTime).length > 0 ? startTime : undefined,
+      priceAmount:
+        filters.priceType === "free"
+          ? { equals: 0 }
+          : filters.priceType === "paid"
+            ? { gt: 0 }
+            : undefined,
       OR: filters.keyword
         ? [
             { title: { contains: filters.keyword, mode: "insensitive" } },
@@ -122,7 +155,11 @@ export async function listWorkshops(filters: { keyword?: string; category?: stri
     include: workshopInclude,
     orderBy: { startTime: "asc" }
   });
-  return workshops.map(toWorkshopDto);
+  const mapped = workshops.map(toWorkshopDto);
+  const filtered = filters.hasSeats ? mapped.filter((workshop) => workshop.remainingSeats > 0) : mapped;
+  const page = filters.page ?? 1;
+  const limit = filters.limit ?? 50;
+  return filtered.slice((page - 1) * limit, page * limit);
 }
 
 export async function getWorkshopDetail(id: string, canSeeDraft = false) {
@@ -244,6 +281,7 @@ export async function updateWorkshop(actorId: string, id: string, input: Record<
     await notifyRegisteredUsers(id, "workshop.changed", "Workshop updated", `${workshop.title} has schedule or room updates.`);
   }
 
+  await publishWorkshopSeatUpdate(id);
   return toWorkshopDto(workshop);
 }
 
@@ -271,6 +309,7 @@ export async function cancelWorkshop(actorId: string, id: string) {
   });
 
   await notifyRegisteredUsers(id, "workshop.cancelled", "Workshop cancelled", `${workshop.title} has been cancelled.`);
+  await publishWorkshopSeatUpdate(id);
   return toWorkshopDto(workshop);
 }
 

@@ -110,6 +110,23 @@ button.secondary,
   color: #155e75;
 }
 
+.nav-notifications {
+  position: relative;
+}
+
+.nav-badge {
+  align-items: center;
+  background: #dc2626;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 800;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px 6px;
+}
+
 .status {
   align-items: center;
   border: 1px solid #cbd5e1;
@@ -188,6 +205,24 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.filters-panel {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.input-with-icon {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto 1fr;
+}
+
+.input-with-icon svg {
+  color: #64748b;
+}
+
 .workshop-card {
   display: grid;
   gap: 12px;
@@ -214,6 +249,21 @@ h2 {
 .badge.paid {
   background: #fef3c7;
   color: #92400e;
+}
+
+.badge.unread-badge {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badge.read-badge {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.sold-out {
+  color: #b91c1c;
+  font-weight: 750;
 }
 
 progress {
@@ -262,6 +312,18 @@ textarea {
 
 .full {
   grid-column: 1 / -1;
+}
+
+.checkbox-row {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  min-height: auto;
+  width: auto;
 }
 
 .notice,
@@ -333,6 +395,92 @@ th {
   font-weight: 750;
 }
 
+.notification-list {
+  display: grid;
+  gap: 12px;
+}
+
+.notification-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr auto;
+  padding: 16px;
+}
+
+.notification-card.unread {
+  border-color: #93c5fd;
+}
+
+.notification-title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notification-title h2 {
+  margin-bottom: 0;
+}
+
+.notification-card p {
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.notification-actions {
+  align-content: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: end;
+}
+
+.pagination {
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.checkbox-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.checkbox-row {
+  align-items: center;
+  display: flex;
+  font-weight: 500;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  min-height: auto;
+  width: auto;
+}
+
+.inline-error {
+  font-size: 0.85rem;
+  margin: 8px 0 0;
+}
+
+.upload-action {
+  align-items: center;
+  border: 1px solid #155e75;
+  border-radius: 6px;
+  color: #155e75;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px;
+}
+
+.upload-action input {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .topbar {
     grid-template-columns: 1fr;
@@ -346,7 +494,13 @@ th {
   }
 
   .detail-grid,
+  .filters-panel,
+  .notification-card,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .notification-actions {
+    justify-content: start;
   }
 }

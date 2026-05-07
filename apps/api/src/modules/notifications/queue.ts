@@ -1,7 +1,14 @@
 import { Queue } from "bullmq";
-import { redisConnection } from "../../config/redis.js";
+import type { QueueOptions } from "bullmq";
+import { logRedisUnavailable, redisConnection } from "../../config/redis.js";
 
-export const notificationQueue = new Queue("notifications", {
+function createQueue(name: string, options: QueueOptions) {
+  const queue = new Queue(name, options);
+  queue.on("error", (error) => logRedisUnavailable(`Queue ${name}`, error));
+  return queue;
+}
+
+export const notificationQueue = createQueue("notifications", {
   connection: redisConnection,
   defaultJobOptions: {
     attempts: 5,
@@ -11,7 +18,7 @@ export const notificationQueue = new Queue("notifications", {
   }
 });
 
-export const aiSummaryQueue = new Queue("ai-summary", {
+export const aiSummaryQueue = createQueue("ai-summary", {
   connection: redisConnection,
   defaultJobOptions: {
     attempts: 3,
@@ -21,7 +28,7 @@ export const aiSummaryQueue = new Queue("ai-summary", {
   }
 });
 
-export const studentImportQueue = new Queue("student-import", {
+export const studentImportQueue = createQueue("student-import", {
   connection: redisConnection,
   defaultJobOptions: {
     attempts: 2,
@@ -39,7 +46,11 @@ export async function publishNotificationJob(data: {
   title: string;
   body: string;
 }) {
-  await notificationQueue.add(data.eventType, data, {
-    jobId: data.dedupeKey
-  });
+  try {
+    await notificationQueue.add(data.eventType, data, {
+      jobId: data.dedupeKey
+    });
+  } catch (error) {
+    logRedisUnavailable("Notification queue publish", error);
+  }
 }

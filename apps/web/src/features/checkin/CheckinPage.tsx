@@ -2,15 +2,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Html5Qrcode } from "html5-qrcode";
-import { Camera, RefreshCw, Save } from "lucide-react";
+import { Camera, DownloadCloud, RefreshCw, Save } from "lucide-react";
 import { ApiClientError } from "@unihub/api-client";
 import { OfflineSyncStatus, type OfflineCheckinRecord } from "@unihub/shared-types";
 import { createClientId, nowIso } from "@unihub/shared-utils";
 import { api } from "../../lib/api";
 import { useOnlineStatus } from "../../lib/useOnlineStatus";
 import { useAuth } from "../auth/AuthProvider";
-import { saveOfflineCheckin } from "../offline/db";
+import {
+  getOfflineQrCacheSummary,
+  markCachedQrTokenUsed,
+  saveOfflineCheckin,
+  saveOfflineQrCache
+} from "../offline/db";
+import { validateQrPayloadWithOfflineCache } from "../offline/qr-cache";
 import { getOrCreateDeviceId, syncPendingCheckins } from "../offline/sync";
+
+type OfflineCacheSummary = Awaited<ReturnType<typeof getOfflineQrCacheSummary>>;
 
 export function CheckinPage() {
   const online = useOnlineStatus();
@@ -19,6 +27,8 @@ export function CheckinPage() {
   const [workshopId, setWorkshopId] = useState("");
   const [manualQr, setManualQr] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [cacheSummary, setCacheSummary] = useState<OfflineCacheSummary | null>(null);
+  const [cacheBusy, setCacheBusy] = useState(false);
   const workshops = useQuery({ queryKey: ["workshops"], queryFn: () => api.workshopApi.list() });
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
 
@@ -27,6 +37,45 @@ export function CheckinPage() {
       void scannerRef.current?.stop().catch(() => undefined);
     };
   }, []);
+
+  useEffect(() => {
+    if (!workshopId) {
+      setCacheSummary(null);
+      return;
+    }
+    void refreshCacheSummary(workshopId);
+  }, [workshopId]);
+
+  async function refreshCacheSummary(targetWorkshopId = workshopId) {
+    if (!targetWorkshopId) {
+      setCacheSummary(null);
+      return;
+    }
+    setCacheSummary(await getOfflineQrCacheSummary(targetWorkshopId));
+  }
+
+  async function preloadQrCache() {
+    if (!workshopId) {
+      setStatus("Select a workshop before syncing QR cache.");
+      return;
+    }
+    if (!online) {
+      setStatus("Go online to sync QR cache for this workshop.");
+      return;
+    }
+
+    setCacheBusy(true);
+    try {
+      const response = await api.checkinApi.offlineCache(workshopId);
+      await saveOfflineQrCache(response);
+      await refreshCacheSummary(workshopId);
+      setStatus(`QR cache synced: ${response.items.length} active QR tokens.`);
+    } catch (error) {
+      setStatus(error instanceof ApiClientError ? error.message : "Could not sync QR cache.");
+    } finally {
+      setCacheBusy(false);
+    }
+  }
 
   async function startScanner() {
     if (!workshopId) {
@@ -54,8 +103,7 @@ export function CheckinPage() {
     }
 
     if (!online) {
-      await storeOffline(qrPayload);
-      setStatus("Đã lưu offline.");
+      await storeValidatedOffline(qrPayload, "Saved offline and pending sync.");
       return;
     }
 
@@ -71,9 +119,22 @@ export function CheckinPage() {
         setStatus(error.message);
         return;
       }
-      await storeOffline(qrPayload);
-      setStatus("Mất kết nối khi gửi API, đã lưu offline.");
+      await storeValidatedOffline(qrPayload, "Network failed; saved offline and pending sync.");
     }
+  }
+
+  async function storeValidatedOffline(qrPayload: string, savedMessage: string) {
+    const validation = await validateQrPayloadWithOfflineCache(qrPayload, workshopId);
+    if (!validation.valid) {
+      setStatus(validation.message);
+      return false;
+    }
+
+    const record = await storeOffline(qrPayload);
+    await markCachedQrTokenUsed(validation.tokenHash, record.checkedInAt);
+    await refreshCacheSummary(workshopId);
+    setStatus(`${validation.message} ${savedMessage}`);
+    return true;
   }
 
   async function storeOffline(qrPayload: string) {
@@ -92,6 +153,7 @@ export function CheckinPage() {
       updatedAt: timestamp
     };
     await saveOfflineCheckin(record);
+    return record;
   }
 
   return (
@@ -119,6 +181,9 @@ export function CheckinPage() {
           <button onClick={startScanner}>
             <Camera size={18} /> Scan
           </button>
+          <button className="secondary" disabled={!workshopId || !online || cacheBusy} onClick={preloadQrCache}>
+            <DownloadCloud size={18} /> Sync QR cache
+          </button>
           <button
             className="secondary"
             onClick={() => {
@@ -130,6 +195,15 @@ export function CheckinPage() {
             <RefreshCw size={18} /> Retry sync
           </button>
         </div>
+        {workshopId ? (
+          <p className="notice">
+            QR cache: {cacheSummary?.active ?? 0} active, {cacheSummary?.usedLocally ?? 0} used locally
+            {cacheSummary?.latestSyncedAt
+              ? `, synced ${new Date(cacheSummary.latestSyncedAt).toLocaleString("vi-VN")}`
+              : ", not synced"}
+            {cacheSummary?.cacheExpiresAt ? `, expires ${new Date(cacheSummary.cacheExpiresAt).toLocaleString("vi-VN")}` : ""}
+          </p>
+        ) : null}
         <label>
           Manual QR payload
           <textarea value={manualQr} onChange={(event) => setManualQr(event.target.value)} rows={4} />

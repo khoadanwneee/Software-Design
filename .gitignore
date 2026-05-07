@@ -17,6 +17,7 @@ coverage/
 *.log
 tmp/
 uploads/
+.unihub-storage/
 
 # Prisma generated caches
 packages/db/node_modules/.prisma/

@@ -103,6 +103,7 @@ model User {
   checkins         Checkin[]          @relation("CheckinStaff")
   notifications    Notification[]
   uploadedAiDocs   AiDocument[]       @relation("AiDocumentUploader")
+  uploadedFiles     UploadedFile[]     @relation("UploadedFileUploader")
   importRuns       StudentImportRun[] @relation("StudentImportCreator")
   auditLogs        AuditLog[]         @relation("AuditActor")
 
@@ -137,6 +138,7 @@ model Room {
   updatedAt  DateTime   @updatedAt @map("updated_at")
 
   @@index([capacity])
+  @@index([status])
   @@map("rooms")
 }
 
@@ -344,12 +346,14 @@ model Notification {
   retryCount  Int                 @default(0) @map("retry_count")
   lastError   String?             @map("last_error")
   sentAt      DateTime?           @map("sent_at")
+  readAt      DateTime?           @map("read_at")
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
   user        User                @relation(fields: [userId], references: [id])
   workshop    Workshop?           @relation(fields: [workshopId], references: [id])
 
   @@index([userId, status])
+  @@index([userId, readAt])
   @@index([eventType, createdAt])
   @@map("notifications")
 }
@@ -390,11 +394,31 @@ model AiSummary {
   @@map("ai_summaries")
 }
 
+model UploadedFile {
+  id             String             @id @default(cuid())
+  fileName       String             @map("file_name")
+  contentType    String             @map("content_type")
+  sizeBytes      Int                @map("size_bytes")
+  storageKey     String             @unique @map("storage_key")
+  checksumSha256 String             @map("checksum_sha256")
+  uploadedById   String?            @map("uploaded_by_id")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  uploadedBy     User?              @relation("UploadedFileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  studentImports StudentImportRun[]
+
+  @@index([checksumSha256])
+  @@index([uploadedById])
+  @@map("uploaded_files")
+}
+
 model StudentImportRun {
   id           String              @id @default(cuid())
   fileName     String              @map("file_name")
   fileHash     String              @map("file_hash")
+  fileId       String?             @map("file_id")
   importType   String              @default("LEGACY_STUDENT_CSV") @map("import_type")
+  description  String?
+  dryRun       Boolean             @default(false) @map("dry_run")
   status       StudentImportStatus @default(PENDING)
   totalRows    Int                 @default(0) @map("total_rows")
   successRows  Int                 @default(0) @map("success_rows")
@@ -404,10 +428,12 @@ model StudentImportRun {
   startedAt    DateTime?           @map("started_at")
   finishedAt   DateTime?           @map("finished_at")
   createdAt    DateTime            @default(now()) @map("created_at")
+  file         UploadedFile?        @relation(fields: [fileId], references: [id], onDelete: SetNull)
   createdBy    User?               @relation("StudentImportCreator", fields: [createdById], references: [id])
   errors       StudentImportError[]
 
   @@unique([fileHash, importType])
+  @@index([fileId])
   @@index([status])
   @@map("student_import_runs")
 }

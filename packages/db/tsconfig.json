@@ -4,6 +4,7 @@
     "outDir": "dist",
     "declaration": true,
     "emitDeclarationOnly": false,
+    "types": ["node"],
     "rootDir": "."
   },
   "include": ["src", "prisma"]

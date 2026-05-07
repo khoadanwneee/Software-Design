@@ -6,6 +6,7 @@ import { createQrTokenForRegistration } from "../../common/utils/qr-token.js";
 import { publishNotificationJob } from "../notifications/queue.js";
 import { executePaymentCall } from "./payment-circuit-breaker.js";
 import { paymentProvider } from "./payment-provider.js";
+import { publishWorkshopSeatUpdate } from "../workshops/workshop-seat-events.js";
 
 export async function createPaymentAttempt(input: {
   registrationId: string;
@@ -130,6 +131,7 @@ export async function handleMockPaymentWebhook(payload: unknown) {
         data: { registeredCount: { decrement: 1 } }
       });
     });
+    await publishWorkshopSeatUpdate(payment.registration.workshopId);
     return { ok: true };
   }
 
@@ -161,5 +163,6 @@ export async function handleMockPaymentWebhook(payload: unknown) {
     body: "Your paid workshop registration has been confirmed."
   });
 
+  await publishWorkshopSeatUpdate(payment.registration.workshopId);
   return { ok: true };
 }

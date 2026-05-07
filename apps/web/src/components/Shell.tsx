@@ -1,7 +1,9 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { ClipboardList, LogOut, QrCode, Settings, Wifi, WifiOff } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Bell, ClipboardList, LogOut, QrCode, Settings, Wifi, WifiOff } from "lucide-react";
 import { Role } from "@unihub/shared-types";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
+import { api } from "../lib/api";
 import { useAuth } from "../features/auth/AuthProvider";
 
 export function Shell() {
@@ -9,6 +11,12 @@ export function Shell() {
   const { user, logout } = useAuth();
   const canAdmin = user?.roles.some((role) => [Role.ADMIN, Role.ORGANIZER].includes(role));
   const canCheckin = user?.roles.some((role) => [Role.ADMIN, Role.ORGANIZER, Role.CHECKIN_STAFF].includes(role));
+  const unread = useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn: () => api.notificationApi.unreadCount(),
+    refetchInterval: 30_000,
+    enabled: Boolean(user)
+  });
 
   return (
     <div className="app-shell">
@@ -19,6 +27,10 @@ export function Shell() {
         <nav aria-label="Primary">
           <NavLink to="/workshops">
             <ClipboardList size={18} /> Workshops
+          </NavLink>
+          <NavLink to="/notifications" className="nav-notifications">
+            <Bell size={18} /> Notifications
+            {unread.data && unread.data.count > 0 ? <span className="nav-badge">{unread.data.count}</span> : null}
           </NavLink>
           {canCheckin ? (
             <NavLink to="/checkin">

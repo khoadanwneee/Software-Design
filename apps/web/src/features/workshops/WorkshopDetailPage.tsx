@@ -3,41 +3,58 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CreditCard, Ticket } from "lucide-react";
 import { ApiClientError } from "@unihub/api-client";
-import { Role } from "@unihub/shared-types";
+import { Role, type WorkshopDto } from "@unihub/shared-types";
 import { createClientId } from "@unihub/shared-utils";
 import { api } from "../../lib/api";
 import { useAuth } from "../auth/AuthProvider";
+import { useWorkshopSeatAvailability } from "./useWorkshopSeatAvailability";
 
 export function WorkshopDetailPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [message, setMessage] = useState<string | null>(null);
   const query = useQuery({ queryKey: ["workshop", id], queryFn: () => api.workshopApi.detail(id!), enabled: Boolean(id) });
-
-  const registerFree = useMutation({
-    mutationFn: () => api.registrationApi.createFree({ workshopId: id!, idempotencyKey: createClientId("reg") }),
-    onSuccess: (registration) => navigate(`/registrations/${registration.id}/qr`),
-    onError: (error) => setMessage(error instanceof ApiClientError ? error.message : "Registration failed")
-  });
-
-  const registerPaid = useMutation({
-    mutationFn: () => api.registrationApi.createPaid({ workshopId: id!, idempotencyKey: createClientId("pay") }),
-    onSuccess: (registration) => setMessage(registration.paymentUrl ? `Payment URL: ${registration.paymentUrl}` : "Payment created"),
-    onError: (error) => setMessage(error instanceof ApiClientError ? error.message : "Payment failed")
-  });
 
   if (query.isLoading) {
     return <p>Loading...</p>;
   }
 
-  if (!query.data) {
+  if (!query.data || !id) {
     return <p className="error">{query.error?.message ?? "Workshop not found"}</p>;
   }
 
-  const workshop = query.data;
-  const isStudent = user?.roles.includes(Role.STUDENT);
-  const canRegister = isStudent && workshop.status === "PUBLISHED" && workshop.remainingSeats > 0;
+  return <WorkshopDetailContent id={id} workshop={query.data} userRoles={user?.roles ?? []} message={message} setMessage={setMessage} />;
+}
+
+function WorkshopDetailContent({
+  id,
+  workshop,
+  userRoles,
+  message,
+  setMessage
+}: {
+  id: string;
+  workshop: WorkshopDto;
+  userRoles: Role[];
+  message: string | null;
+  setMessage: (message: string | null) => void;
+}) {
+  const navigate = useNavigate();
+  const seat = useWorkshopSeatAvailability(workshop);
+  const isStudent = userRoles.includes(Role.STUDENT);
+  const canRegister = isStudent && seat.status === "PUBLISHED" && seat.remainingSeats > 0;
+
+  const registerFree = useMutation({
+    mutationFn: () => api.registrationApi.createFree({ workshopId: id, idempotencyKey: createClientId("reg") }),
+    onSuccess: (registration) => navigate(`/registrations/${registration.id}/qr`),
+    onError: (error) => setMessage(error instanceof ApiClientError ? error.message : "Registration failed")
+  });
+
+  const registerPaid = useMutation({
+    mutationFn: () => api.registrationApi.createPaid({ workshopId: id, idempotencyKey: createClientId("pay") }),
+    onSuccess: (registration) => setMessage(registration.paymentUrl ? `Payment URL: ${registration.paymentUrl}` : "Payment created"),
+    onError: (error) => setMessage(error instanceof ApiClientError ? error.message : "Payment failed")
+  });
 
   return (
     <article className="detail">
@@ -50,7 +67,7 @@ export function WorkshopDetailPage() {
           <p>Phòng: {workshop.room.name}</p>
           <p>Thời gian: {new Date(workshop.startTime).toLocaleString("vi-VN")}</p>
           <p>
-            Chỗ: {workshop.registeredCount}/{workshop.capacity}
+            Chỗ: {seat.registeredCount}/{seat.capacity}
           </p>
           <p>Diễn giả: {workshop.speakers.map((speaker) => speaker.fullName).join(", ")}</p>
         </div>
@@ -71,7 +88,7 @@ export function WorkshopDetailPage() {
           </button>
         )
       ) : (
-        <p className="notice">Workshop không mở đăng ký.</p>
+        <p className="notice">{seat.remainingSeats <= 0 ? "Hết chỗ." : "Workshop không mở đăng ký."}</p>
       )}
     </article>
   );

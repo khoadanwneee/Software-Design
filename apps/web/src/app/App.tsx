@@ -8,6 +8,7 @@ import { syncPendingCheckins } from "../features/offline/sync";
 import { LoginPage } from "../features/auth/LoginPage";
 import { WorkshopListPage } from "../features/workshops/WorkshopListPage";
 import { WorkshopDetailPage } from "../features/workshops/WorkshopDetailPage";
+import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { RegistrationQrPage } from "../features/registrations/RegistrationQrPage";
 import { CheckinPage } from "../features/checkin/CheckinPage";
 import { CheckinQueuePage } from "../features/checkin/CheckinQueuePage";
@@ -15,6 +16,9 @@ import { AdminDashboardPage } from "../features/admin/AdminDashboardPage";
 import { AdminWorkshopsPage } from "../features/admin/AdminWorkshopsPage";
 import { AdminWorkshopFormPage } from "../features/admin/AdminWorkshopFormPage";
 import { AdminStatisticsPage } from "../features/admin/AdminStatisticsPage";
+import { AdminRoomsPage } from "../features/admin/AdminRoomsPage";
+import { AdminUsersPage } from "../features/admin/AdminUsersPage";
+import { AdminStudentImportsPage } from "../features/admin/AdminStudentImportsPage";
 import { AdminAiSummaryPage } from "../features/ai-summary/AdminAiSummaryPage";
 import { ForbiddenPage } from "./ForbiddenPage";
 
@@ -48,6 +52,7 @@ export function App() {
         <Route index element={<Navigate to="/workshops" replace />} />
         <Route path="/workshops" element={<WorkshopListPage />} />
         <Route path="/workshops/:id" element={<WorkshopDetailPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/registrations/:id/qr" element={<RegistrationQrPage />} />
         <Route
           path="/checkin"
@@ -98,6 +103,14 @@ export function App() {
           }
         />
         <Route
+          path="/admin/rooms"
+          element={
+            <RoleGuard roles={[Role.ORGANIZER, Role.ADMIN]}>
+              <AdminRoomsPage />
+            </RoleGuard>
+          }
+        />
+        <Route
           path="/admin/statistics"
           element={
             <RoleGuard roles={[Role.ORGANIZER, Role.ADMIN]}>
@@ -110,6 +123,22 @@ export function App() {
           element={
             <RoleGuard roles={[Role.ORGANIZER, Role.ADMIN]}>
               <AdminAiSummaryPage />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/student-imports"
+          element={
+            <RoleGuard roles={[Role.ADMIN]}>
+              <AdminStudentImportsPage />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <RoleGuard roles={[Role.ADMIN]}>
+              <AdminUsersPage />
             </RoleGuard>
           }
         />

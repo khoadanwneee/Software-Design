@@ -1,4 +1,5 @@
 import type {
+  OfflineCheckinCacheResponse,
   OfflineCheckinRecord,
   OfflineCheckinSyncResponse,
   OfflineCheckinSyncResult
@@ -34,6 +35,69 @@ export async function validateQr(input: { qrPayload: string; workshopId: string 
   }
 
   return { valid: true, message: `Valid QR for ${qr.registration.user.fullName}` };
+}
+
+export async function getOfflineCheckinCache(input: { workshopId: string }): Promise<OfflineCheckinCacheResponse> {
+  const workshop = await prisma.workshop.findUnique({
+    where: { id: input.workshopId },
+    select: { id: true, status: true, endTime: true }
+  });
+
+  if (!workshop) {
+    throw new AppError(404, ErrorCodes.NOT_FOUND, "Workshop not found");
+  }
+  if (workshop.status !== "PUBLISHED") {
+    throw new AppError(409, "WORKSHOP_NOT_OPEN", "Workshop is not open for offline check-in cache");
+  }
+
+  const now = new Date();
+  const twelveHoursFromNow = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+  const expiresAt = workshop.endTime.getTime() < twelveHoursFromNow.getTime() ? workshop.endTime : twelveHoursFromNow;
+
+  const qrTokens = await prisma.qrToken.findMany({
+    where: {
+      status: "ACTIVE",
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      registration: {
+        workshopId: input.workshopId,
+        status: "CONFIRMED"
+      }
+    },
+    select: {
+      tokenHash: true,
+      registrationId: true,
+      expiresAt: true,
+      registration: {
+        select: {
+          workshopId: true,
+          user: {
+            select: {
+              fullName: true,
+              studentProfile: {
+                select: { studentCode: true }
+              }
+            }
+          }
+        }
+      }
+    },
+    orderBy: { createdAt: "asc" }
+  });
+
+  return {
+    workshopId: input.workshopId,
+    generatedAt: now.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    items: qrTokens.map((qr) => ({
+      tokenHash: qr.tokenHash,
+      registrationId: qr.registrationId,
+      workshopId: qr.registration.workshopId,
+      studentName: qr.registration.user.fullName,
+      studentCode: qr.registration.user.studentProfile?.studentCode ?? null,
+      qrExpiresAt: qr.expiresAt?.toISOString() ?? null,
+      cacheExpiresAt: expiresAt.toISOString()
+    }))
+  };
 }
 
 export async function createOnlineCheckin(input: {

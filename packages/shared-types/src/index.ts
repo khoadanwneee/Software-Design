@@ -11,6 +11,12 @@ export enum UserStatus {
   PENDING_VERIFICATION = "PENDING_VERIFICATION"
 }
 
+export enum RoomStatus {
+  ACTIVE = "ACTIVE",
+  INACTIVE = "INACTIVE",
+  ARCHIVED = "ARCHIVED"
+}
+
 export enum WorkshopStatus {
   DRAFT = "DRAFT",
   PUBLISHED = "PUBLISHED",
@@ -64,6 +70,9 @@ export enum NotificationChannel {
   TELEGRAM = "TELEGRAM"
 }
 
+export type NotificationReadStatus = "UNREAD" | "READ";
+export type NotificationListStatus = NotificationReadStatus | "ALL";
+
 export enum AiSummaryStatus {
   PENDING = "PENDING",
   PROCESSING = "PROCESSING",
@@ -77,6 +86,15 @@ export enum StudentImportStatus {
   DONE = "DONE",
   DONE_WITH_ERRORS = "DONE_WITH_ERRORS",
   FAILED = "FAILED"
+}
+
+export interface UploadedFileDto {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  storageKey: string;
+  createdAt: string;
 }
 
 export interface AuthUser {
@@ -101,7 +119,11 @@ export interface RoomDto {
   id: string;
   name: string;
   capacity: number;
+  status: RoomStatus;
   layoutUrl?: string | null;
+  workshopCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SpeakerDto {
@@ -133,6 +155,30 @@ export interface WorkshopDto {
   } | null;
 }
 
+export type WorkshopPriceType = "all" | "free" | "paid";
+
+export interface WorkshopListFilters {
+  keyword?: string;
+  category?: string;
+  roomId?: string;
+  date?: string;
+  fromDate?: string;
+  toDate?: string;
+  hasSeats?: boolean;
+  priceType?: WorkshopPriceType;
+  page?: number;
+  limit?: number;
+}
+
+export interface WorkshopSeatAvailabilityDto {
+  workshopId: string;
+  capacity: number;
+  registeredCount: number;
+  remainingSeats: number;
+  status: WorkshopStatus;
+  updatedAt: string;
+}
+
 export interface CreateWorkshopRequest {
   title: string;
   description: string;
@@ -145,6 +191,136 @@ export interface CreateWorkshopRequest {
   currency?: string;
   speakerIds?: string[];
   status?: WorkshopStatus;
+}
+
+export interface CreateRoomRequest {
+  name: string;
+  capacity: number;
+  status?: RoomStatus;
+  layoutUrl?: string | null;
+}
+
+export type UpdateRoomRequest = Partial<CreateRoomRequest>;
+
+export interface RoomLayoutMetadataRequest {
+  fileName: string;
+  contentType: string;
+  size: number;
+}
+
+export interface AdminUserDto {
+  id: string;
+  email: string;
+  fullName: string;
+  roles: Role[];
+  status: UserStatus;
+  createdAt: string;
+}
+
+export interface UserListFilters {
+  keyword?: string;
+  role?: Role;
+  status?: UserStatus;
+  page?: number;
+  limit?: number;
+}
+
+export interface UpdateUserRolesRequest {
+  roles: Role[];
+}
+
+export interface UpdateUserStatusRequest {
+  status: UserStatus;
+}
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  type?: string;
+  status: NotificationReadStatus;
+  createdAt: string;
+  readAt?: string | null;
+  workshopId?: string | null;
+  workshopTitle?: string | null;
+  actionUrl?: string | null;
+}
+
+export interface NotificationsResponse {
+  items: NotificationItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface NotificationListParams {
+  page?: number;
+  limit?: number;
+  status?: NotificationListStatus;
+}
+
+export interface UnreadCountResponse {
+  count: number;
+}
+
+export interface StudentImportErrorDto {
+  id: string;
+  runId: string;
+  rowNumber: number;
+  studentCode?: string | null;
+  email?: string | null;
+  errorCode: string;
+  errorMessage: string;
+  rawRow?: unknown;
+  createdAt: string;
+}
+
+export interface StudentImportRunDto {
+  id: string;
+  fileName: string;
+  fileHash: string;
+  fileId?: string | null;
+  importType: string;
+  description?: string | null;
+  dryRun: boolean;
+  status: StudentImportStatus;
+  totalRows: number;
+  successRows: number;
+  failedRows: number;
+  errorMessage?: string | null;
+  createdById?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  createdAt: string;
+  file?: UploadedFileDto | null;
+}
+
+export interface StudentImportRunDetailDto extends StudentImportRunDto {
+  errors: StudentImportErrorDto[];
+}
+
+export interface StudentImportListParams {
+  page?: number;
+  limit?: number;
+  status?: StudentImportStatus;
+}
+
+export interface StudentImportListResponse {
+  items: StudentImportRunDto[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface StudentImportUploadResponse {
+  jobId: string;
+  fileId?: string | null;
+  status: StudentImportStatus;
+  totalRows: number;
+  message: string;
+  run: StudentImportRunDto;
 }
 
 export interface RegistrationDto {
@@ -187,6 +363,31 @@ export interface OfflineCheckinRecord {
   lastError?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type OfflineQrCacheLocalStatus = "ACTIVE" | "USED_LOCALLY";
+
+export interface OfflineQrCacheItem {
+  tokenHash: string;
+  registrationId: string;
+  workshopId: string;
+  studentName?: string | null;
+  studentCode?: string | null;
+  qrExpiresAt?: string | null;
+  cacheExpiresAt: string;
+}
+
+export interface OfflineCheckinCacheResponse {
+  workshopId: string;
+  generatedAt: string;
+  expiresAt: string;
+  items: OfflineQrCacheItem[];
+}
+
+export interface OfflineQrCacheEntry extends OfflineQrCacheItem {
+  syncedAt: string;
+  localStatus: OfflineQrCacheLocalStatus;
+  localUsedAt?: string | null;
 }
 
 export interface OfflineCheckinSyncRequest {

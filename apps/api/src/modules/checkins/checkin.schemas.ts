@@ -6,6 +6,10 @@ export const validateQrSchema = z.object({
   workshopId: z.string().min(1)
 });
 
+export const offlineCacheQuerySchema = z.object({
+  workshopId: z.string().min(1)
+});
+
 export const onlineCheckinSchema = validateQrSchema.extend({
   idempotencyKey: z.string().min(8).max(120)
 });

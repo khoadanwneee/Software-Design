@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import type { ZodSchema } from "zod";
+import type { ZodSchema, ZodTypeAny } from "zod";
 
 export function validateBody<T>(schema: ZodSchema<T>) {
   return (req: Request, _res: Response, next: NextFunction) => {
@@ -11,6 +11,13 @@ export function validateBody<T>(schema: ZodSchema<T>) {
 export function validateParams<T>(schema: ZodSchema<T>) {
   return (req: Request, _res: Response, next: NextFunction) => {
     req.params = schema.parse(req.params) as typeof req.params;
+    next();
+  };
+}
+
+export function validateQuery(schema: ZodTypeAny) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    req.query = schema.parse(req.query) as typeof req.query;
     next();
   };
 }

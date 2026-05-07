@@ -7,6 +7,7 @@ import { createQrTokenForRegistration } from "../../common/utils/qr-token.js";
 import { withIdempotency } from "../../common/utils/idempotency.js";
 import { publishNotificationJob } from "../notifications/queue.js";
 import { createPaymentAttempt } from "../payments/payment.service.js";
+import { publishWorkshopSeatUpdate } from "../workshops/workshop-seat-events.js";
 
 async function assertVerifiedStudent(userId: string) {
   const studentProfile = await prisma.studentProfile.findUnique({ where: { userId } });
@@ -107,6 +108,7 @@ export async function createFreeRegistration(input: {
         title: "Registration confirmed",
         body: "Your workshop registration is confirmed."
       });
+      await publishWorkshopSeatUpdate(input.workshopId);
 
       return result;
     }
@@ -120,7 +122,7 @@ export async function createPaidRegistration(input: {
 }): Promise<RegistrationDto> {
   await assertVerifiedStudent(input.userId);
 
-  return withIdempotency({
+  const result = await withIdempotency({
     scope: "registration.paid",
     key: input.idempotencyKey,
     payload: { userId: input.userId, workshopId: input.workshopId },
@@ -174,6 +176,9 @@ export async function createPaidRegistration(input: {
       };
     }
   });
+
+  await publishWorkshopSeatUpdate(input.workshopId);
+  return result;
 }
 
 export async function getRegistrationQr(input: { registrationId: string; requesterId: string; isAdmin: boolean }) {

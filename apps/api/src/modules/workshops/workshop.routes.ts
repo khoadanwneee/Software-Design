@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { Role } from "@unihub/shared-types";
+import { Role, type WorkshopListFilters, type WorkshopSeatAvailabilityDto } from "@unihub/shared-types";
 import { asyncHandler } from "../../common/utils/async-handler.js";
-import { validateBody } from "../../common/middleware/validate.js";
+import { validateBody, validateQuery } from "../../common/middleware/validate.js";
 import { requireAuth, requireRole } from "../auth/auth.middleware.js";
-import { createWorkshopSchema, updateWorkshopSchema } from "./workshop.schemas.js";
+import { createWorkshopSchema, updateWorkshopSchema, workshopListQuerySchema } from "./workshop.schemas.js";
 import {
   cancelWorkshop,
   createWorkshop,
@@ -11,24 +11,89 @@ import {
   listWorkshops,
   updateWorkshop
 } from "./workshop.service.js";
+import { getWorkshopSeatAvailability, subscribeWorkshopSeatUpdates } from "./workshop-seat-events.js";
 
 export const workshopRouter = Router();
 
 workshopRouter.use(requireAuth);
 
+/**
+ * @openapi
+ * /api/workshops:
+ *   get:
+ *     summary: List workshops with search and filters.
+ */
 workshopRouter.get(
   "/",
+  validateQuery(workshopListQuerySchema),
   asyncHandler(async (req, res) => {
     const includeAll = req.user?.roles.some((role) => [Role.ADMIN, Role.ORGANIZER].includes(role)) ?? false;
     res.json(
       await listWorkshops(
-        {
-          keyword: req.query.keyword as string | undefined,
-          category: req.query.category as string | undefined
-        },
+        req.query as unknown as WorkshopListFilters,
         includeAll
       )
     );
+  })
+);
+
+workshopRouter.get(
+  "/:id/seats",
+  asyncHandler(async (req, res) => {
+    const canSeeDraft = req.user?.roles.some((role) => [Role.ADMIN, Role.ORGANIZER].includes(role)) ?? false;
+    res.json(await getWorkshopSeatAvailability({ workshopId: String(req.params.id), canSeeDraft }));
+  })
+);
+
+/**
+ * @openapi
+ * /api/workshops/{id}/seats/stream:
+ *   get:
+ *     summary: Stream workshop seat availability using Server-Sent Events.
+ */
+workshopRouter.get(
+  "/:id/seats/stream",
+  asyncHandler(async (req, res) => {
+    const workshopId = String(req.params.id);
+    const canSeeDraft = req.user?.roles.some((role) => [Role.ADMIN, Role.ORGANIZER].includes(role)) ?? false;
+    const initial = await getWorkshopSeatAvailability({ workshopId, canSeeDraft });
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
+
+    const send = (payload: WorkshopSeatAvailabilityDto) => {
+      res.write(`event: workshop.seats.updated\n`);
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    send(initial);
+
+    const heartbeat = setInterval(() => {
+      res.write(": keep-alive\n\n");
+    }, 25_000);
+
+    const unsubscribe = await subscribeWorkshopSeatUpdates({
+      workshopId,
+      onUpdate: send
+    }).catch((error) => {
+      console.warn("Seat stream Redis subscription unavailable; client can fall back to polling", error);
+      return null;
+    });
+
+    if (!unsubscribe) {
+      clearInterval(heartbeat);
+      res.end();
+      return;
+    }
+
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      void unsubscribe();
+    });
   })
 );
 
@@ -77,13 +142,5 @@ workshopRouter.post(
   requireRole([Role.ORGANIZER, Role.ADMIN]),
   asyncHandler(async (req, res) => {
     res.json(await cancelWorkshop(req.user!.id, String(req.params.id)));
-  })
-);
-
-workshopRouter.get(
-  "/:id/seats",
-  asyncHandler(async (req, res) => {
-    const workshop = await getWorkshopDetail(String(req.params.id));
-    res.json({ workshopId: workshop.id, remainingSeats: workshop.remainingSeats });
   })
 );

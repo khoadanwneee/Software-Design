@@ -25,4 +25,5 @@ apiRouter.use("/checkins", checkinRouter);
 apiRouter.use("/notifications", notificationRouter);
 apiRouter.use("/ai-summary", aiSummaryRouter);
 apiRouter.use("/student-import", studentImportRouter);
+apiRouter.use("/admin/student-imports", studentImportRouter);
 apiRouter.use("/admin", adminRouter);

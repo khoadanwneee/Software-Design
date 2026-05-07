@@ -88,6 +88,8 @@ Start infrastructure:
 docker compose -f infra/compose.yaml up -d
 ```
 
+Redis must be running for BullMQ workers, notification jobs, rate-limit state, and realtime seat SSE/pub-sub. If Redis is offline, the API can still boot for basic read-only development, but Redis-backed features are degraded and worker jobs will not run.
+
 Run Prisma:
 
 ```sh
@@ -196,7 +198,7 @@ Database-backed test cases are scaffolded in `apps/api/tests/integration-bluepri
 - The UI is functional scaffold quality, not final product design.
 - Payment provider and AI provider are mocks.
 - Staff-to-workshop assignment is not modeled yet.
-- Realtime seat updates use refetch/polling-ready structure rather than SSE/WebSocket.
+- Realtime seat updates use SSE over Redis pub/sub with short-polling fallback in the web app.
 - Test database lifecycle is not wired into CI.
 
 ## ASSUMPTION

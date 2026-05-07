@@ -1,15 +1,29 @@
 import { Router } from "express";
 import { Role } from "@unihub/shared-types";
 import { asyncHandler } from "../../common/utils/async-handler.js";
-import { validateBody } from "../../common/middleware/validate.js";
+import { validateBody, validateQuery } from "../../common/middleware/validate.js";
 import { checkinSyncRateLimit } from "../../common/middleware/rate-limit.js";
 import { requireAuth, requireRole } from "../auth/auth.middleware.js";
-import { offlineSyncSchema, onlineCheckinSchema, validateQrSchema } from "./checkin.schemas.js";
-import { createOnlineCheckin, syncOfflineCheckins, validateQr } from "./checkin.service.js";
+import { offlineCacheQuerySchema, offlineSyncSchema, onlineCheckinSchema, validateQrSchema } from "./checkin.schemas.js";
+import { createOnlineCheckin, getOfflineCheckinCache, syncOfflineCheckins, validateQr } from "./checkin.service.js";
 
 export const checkinRouter = Router();
 
 checkinRouter.use(requireAuth, requireRole([Role.CHECKIN_STAFF, Role.ORGANIZER, Role.ADMIN]));
+
+/**
+ * @openapi
+ * /api/checkins/offline-cache:
+ *   get:
+ *     summary: Preload active QR token hashes for offline check-in validation.
+ */
+checkinRouter.get(
+  "/offline-cache",
+  validateQuery(offlineCacheQuerySchema),
+  asyncHandler(async (req, res) => {
+    res.json(await getOfflineCheckinCache({ workshopId: String(req.query.workshopId) }));
+  })
+);
 
 checkinRouter.post(
   "/validate",

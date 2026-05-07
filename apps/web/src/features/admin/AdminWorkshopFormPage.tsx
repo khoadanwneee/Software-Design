@@ -25,7 +25,7 @@ type FormValues = z.infer<typeof schema>;
 export function AdminWorkshopFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const rooms = useQuery({ queryKey: ["rooms"], queryFn: () => api.raw.request<Array<{ id: string; name: string }>>("/rooms") });
+  const rooms = useQuery({ queryKey: ["rooms"], queryFn: () => api.roomApi.list() });
   const detail = useQuery({ queryKey: ["workshop", id], queryFn: () => api.workshopApi.detail(id!), enabled: Boolean(id) });
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -90,11 +90,13 @@ export function AdminWorkshopFormPage() {
           Room
           <select {...form.register("roomId")}>
             <option value="">Select room</option>
-            {rooms.data?.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.name}
-              </option>
-            ))}
+            {rooms.data
+              ?.filter((room) => room.status === "ACTIVE" || room.id === detail.data?.room.id)
+              .map((room) => (
+                <option key={room.id} value={room.id}>
+                  {room.name}
+                </option>
+              ))}
           </select>
         </label>
         <label>
