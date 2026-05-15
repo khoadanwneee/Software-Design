@@ -1,6 +1,7 @@
 import type { Job } from "bullmq";
 import { Role, StudentImportStatus } from "@unihub/shared-types";
 import { localObjectStorage, prisma } from "@unihub/db";
+import bcrypt from "bcryptjs";
 import { notificationQueue } from "../queues.js";
 import { parseCsv } from "./csv-parser.js";
 
@@ -10,6 +11,9 @@ interface StudentImportJobData {
 }
 
 const requiredHeaders = ["student_code", "email", "full_name"];
+const STUDENT_CODE_PATTERN = /^SV\d{6}$/;
+const PASSWORD_PREFIX = "KHTN@";
+const PASSWORD_ROUNDS = 10;
 
 export async function processStudentImport(job: Job<StudentImportJobData>) {
   const run = await prisma.studentImportRun.findUnique({
@@ -116,11 +120,12 @@ function validateRow(row: Record<string, string>, seenStudentCodes: Set<string>)
   if (!row.student_code) {
     return { code: "MISSING_STUDENT_CODE", message: "student_code is required" };
   }
-  if (!/^[A-Za-z0-9_-]{4,30}$/.test(row.student_code)) {
-    return { code: "INVALID_STUDENT_CODE", message: "student_code format is invalid" };
+  if (!STUDENT_CODE_PATTERN.test(row.student_code)) {
+    return { code: "INVALID_STUDENT_CODE", message: "student_code must match format SV + 6 digits (e.g. SV202610)" };
   }
-  if (!row.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-    return { code: "INVALID_EMAIL", message: "email is invalid" };
+  const expectedEmail = `${row.student_code.toLowerCase()}@unihub.local`;
+  if (!row.email || row.email.toLowerCase() !== expectedEmail) {
+    return { code: "INVALID_EMAIL", message: `email must match ${expectedEmail}` };
   }
   if (!row.full_name) {
     return { code: "MISSING_FULL_NAME", message: "full_name is required" };
@@ -132,9 +137,50 @@ function validateRow(row: Record<string, string>, seenStudentCodes: Set<string>)
 }
 
 async function upsertStudent(row: Record<string, string>) {
+  const studentCode = row.student_code.toUpperCase();
+  const email = row.email.toLowerCase();
+  const passwordSuffix = studentCode.slice(-2);
+  const plainPassword = `${PASSWORD_PREFIX}${passwordSuffix}`;
+  const passwordHash = await bcrypt.hash(plainPassword, PASSWORD_ROUNDS);
+
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, roles: true }
+  });
+
+  let userId: string;
+  if (existingUser) {
+    const roles = existingUser.roles.includes(Role.STUDENT)
+      ? existingUser.roles
+      : [...existingUser.roles, Role.STUDENT];
+
+    await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        fullName: row.full_name,
+        passwordHash,
+        roles,
+        status: "ACTIVE"
+      }
+    });
+    userId = existingUser.id;
+  } else {
+    const createdUser = await prisma.user.create({
+      data: {
+        email,
+        fullName: row.full_name,
+        passwordHash,
+        roles: [Role.STUDENT],
+        status: "ACTIVE"
+      },
+      select: { id: true }
+    });
+    userId = createdUser.id;
+  }
+
   const existing = await prisma.studentProfile.findFirst({
     where: {
-      OR: [{ studentCode: row.student_code }, { email: row.email }]
+      OR: [{ studentCode }, { email }]
     }
   });
 
@@ -142,8 +188,9 @@ async function upsertStudent(row: Record<string, string>) {
     await prisma.studentProfile.update({
       where: { id: existing.id },
       data: {
-        studentCode: row.student_code,
-        email: row.email,
+        userId,
+        studentCode,
+        email,
         fullName: row.full_name,
         major: row.major || existing.major,
         className: row.class || row.class_name || existing.className,
@@ -156,8 +203,9 @@ async function upsertStudent(row: Record<string, string>) {
 
   await prisma.studentProfile.create({
     data: {
-      studentCode: row.student_code,
-      email: row.email,
+      userId,
+      studentCode,
+      email,
       fullName: row.full_name,
       major: row.major || null,
       className: row.class || row.class_name || null,

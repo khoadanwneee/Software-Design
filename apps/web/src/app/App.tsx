@@ -21,6 +21,8 @@ import { AdminUsersPage } from "../features/admin/AdminUsersPage";
 import { AdminStudentImportsPage } from "../features/admin/AdminStudentImportsPage";
 import { AdminAiSummaryPage } from "../features/ai-summary/AdminAiSummaryPage";
 import { ForbiddenPage } from "./ForbiddenPage";
+import { PaymentSuccessPage } from "./PaymentSuccessPage";
+import { PaymentFailedPage } from "./PaymentFailedPage";
 
 export function App() {
   const { user } = useAuth();
@@ -42,6 +44,8 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/payment-success" element={<PaymentSuccessPage />} />
+      <Route path="/payment-failed" element={<PaymentFailedPage />} />
       <Route
         element={
           <RoleGuard>
