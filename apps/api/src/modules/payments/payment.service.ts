@@ -8,13 +8,23 @@ import { executePaymentCall } from "./payment-circuit-breaker.js";
 import { paymentProvider } from "./payment-provider.js";
 import { publishWorkshopSeatUpdate } from "../workshops/workshop-seat-events.js";
 
+const VNP_RETURN_URL = process.env.VNP_RETURN_URL?.trim() ?? "";
+
+//
+// =====================================
+// 1. CREATE PAYMENT (VNPay session)
+// =====================================
+//
 export async function createPaymentAttempt(input: {
   registrationId: string;
   amount: number;
   currency: string;
   idempotencyKey: string;
 }) {
-  const existing = await prisma.payment.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+  const existing = await prisma.payment.findUnique({
+    where: { idempotencyKey: input.idempotencyKey }
+  });
+
   if (existing) {
     return {
       registrationId: existing.registrationId,
@@ -38,7 +48,9 @@ export async function createPaymentAttempt(input: {
       data: {
         registrationId: input.registrationId,
         idempotencyKey: input.idempotencyKey,
-        provider: "mock",
+
+        provider: "vnpay",
+
         providerOrderId: session.providerOrderId,
         amount: input.amount,
         currency: input.currency,
@@ -58,49 +70,141 @@ export async function createPaymentAttempt(input: {
       data: {
         registrationId: input.registrationId,
         idempotencyKey: input.idempotencyKey,
-        provider: "mock",
+
+        provider: "vnpay",
+
         amount: input.amount,
         currency: input.currency,
         status: PaymentStatus.INIT_FAILED
       }
     });
-    throw new AppError(503, ErrorCodes.PAYMENT_UNAVAILABLE, "Payment gateway is temporarily unavailable");
+
+    throw new AppError(
+      503,
+      ErrorCodes.PAYMENT_UNAVAILABLE,
+      "Payment gateway is temporarily unavailable"
+    );
   }
 }
 
-export async function handleMockPaymentWebhook(payload: unknown) {
-  const verification = await paymentProvider.verifyWebhook(payload);
-  const providerEventId = verification.providerTransactionId || verification.providerOrderId;
-
-  const existingCallback = await prisma.paymentCallback.findUnique({
-    where: { provider_providerEventId: { provider: "mock", providerEventId } }
+export async function createOrRefreshPaymentAttempt(input: {
+  registrationId: string;
+  amount: number;
+  currency: string;
+  idempotencyKey: string;
+}) {
+  const existing = await prisma.payment.findUnique({
+    where: { registrationId: input.registrationId }
   });
-  if (existingCallback) {
-    return { ok: true, duplicate: true };
+
+  if (!existing) {
+    return createPaymentAttempt(input);
   }
 
-  const paymentForLog = await prisma.payment.findFirst({
-    where: { providerOrderId: verification.providerOrderId }
-  });
+  const shouldRefresh =
+    !existing.paymentUrl ||
+    existing.paymentUrl.includes(" ") ||
+    existing.status === PaymentStatus.FAILED ||
+    existing.status === PaymentStatus.INIT_FAILED ||
+    !existing.paymentUrl.includes("vnp_SecureHashType=") ||
+    (VNP_RETURN_URL
+      ? !existing.paymentUrl.includes(encodeURIComponent(VNP_RETURN_URL))
+      : false);
 
-  await prisma.paymentCallback.create({
-    data: {
-      paymentId: paymentForLog?.id,
-      provider: "mock",
-      providerEventId,
-      providerTransactionId: verification.providerTransactionId || null,
-      validSignature: verification.valid,
-      payload: payload as object
+  if (!shouldRefresh) {
+    return {
+      registrationId: existing.registrationId,
+      paymentId: existing.id,
+      paymentUrl: existing.paymentUrl,
+      status: existing.status
+    };
+  }
+
+  try {
+    const session = await executePaymentCall(() =>
+      paymentProvider.createSession({
+        registrationId: input.registrationId,
+        amount: input.amount,
+        currency: input.currency,
+        idempotencyKey: input.idempotencyKey
+      })
+    );
+
+    const payment = await prisma.payment.update({
+      where: { id: existing.id },
+      data: {
+        provider: "vnpay",
+        providerOrderId: session.providerOrderId,
+        providerTransactionId: null,
+        amount: input.amount,
+        currency: input.currency,
+        paymentUrl: session.paymentUrl,
+        status: PaymentStatus.PENDING
+      }
+    });
+
+    return {
+      registrationId: payment.registrationId,
+      paymentId: payment.id,
+      paymentUrl: session.paymentUrl,
+      status: payment.status
+    };
+  } catch {
+    await prisma.payment
+      .update({
+        where: { id: existing.id },
+        data: { status: PaymentStatus.INIT_FAILED }
+      })
+      .catch(() => undefined);
+
+    throw new AppError(
+      503,
+      ErrorCodes.PAYMENT_UNAVAILABLE,
+      "Payment gateway is temporarily unavailable"
+    );
+  }
+}
+
+//
+// =====================================
+// 2. VNPay IPN HANDLER (REAL)
+// =====================================
+//
+export async function handleVNPayIPN(query: any) {
+  const verification = await paymentProvider.verifyWebhook(query);
+
+  const providerEventId =
+    verification.providerTransactionId || verification.providerOrderId;
+
+  if (!verification.valid) {
+    throw new AppError(
+      400,
+      "INVALID_PAYMENT_WEBHOOK_SIGNATURE",
+      "Payment webhook signature is invalid"
+    );
+  }
+
+  const existingCallback = await prisma.paymentCallback.findUnique({
+    where: {
+      provider_providerEventId: {
+        provider: "vnpay",
+        providerEventId
+      }
     }
   });
 
-  if (!verification.valid) {
-    throw new AppError(400, "INVALID_PAYMENT_WEBHOOK_SIGNATURE", "Payment webhook signature is invalid");
+  if (existingCallback) {
+    if (existingCallback.validSignature) {
+      return { ok: true, duplicate: true };
+    }
   }
 
   const existingTransaction = await prisma.payment.findUnique({
-    where: { providerTransactionId: verification.providerTransactionId }
+    where: {
+      providerTransactionId: verification.providerTransactionId
+    }
   });
+
   if (existingTransaction) {
     return { ok: true, duplicate: true };
   }
@@ -109,8 +213,39 @@ export async function handleMockPaymentWebhook(payload: unknown) {
     where: { providerOrderId: verification.providerOrderId },
     include: { registration: true }
   });
+
   if (!payment) {
     throw new AppError(404, ErrorCodes.NOT_FOUND, "Payment not found");
+  }
+
+  if (existingCallback) {
+    await prisma.paymentCallback.update({
+      where: {
+        provider_providerEventId: {
+          provider: "vnpay",
+          providerEventId
+        }
+      },
+      data: {
+        paymentId: payment.id,
+        providerTransactionId:
+          verification.providerTransactionId || null,
+        validSignature: true,
+        payload: query as object
+      }
+    });
+  } else {
+    await prisma.paymentCallback.create({
+      data: {
+        paymentId: payment.id,
+        provider: "vnpay",
+        providerEventId,
+        providerTransactionId:
+          verification.providerTransactionId || null,
+        validSignature: true,
+        payload: query as object
+      }
+    });
   }
 
   if (verification.status === "failed") {
@@ -122,16 +257,24 @@ export async function handleMockPaymentWebhook(payload: unknown) {
           providerTransactionId: verification.providerTransactionId
         }
       });
+
       await tx.registration.update({
         where: { id: payment.registrationId },
         data: { status: "PAYMENT_FAILED" }
       });
+
       await tx.workshop.update({
         where: { id: payment.registration.workshopId },
-        data: { registeredCount: { decrement: 1 } }
+        data: {
+          registeredCount: { decrement: 1 }
+        }
       });
     });
-    await publishWorkshopSeatUpdate(payment.registration.workshopId);
+
+    await publishWorkshopSeatUpdate(
+      payment.registration.workshopId
+    );
+
     return { ok: true };
   }
 
@@ -143,14 +286,21 @@ export async function handleMockPaymentWebhook(payload: unknown) {
         providerTransactionId: verification.providerTransactionId
       }
     });
+
     await tx.registration.update({
       where: { id: payment.registrationId },
       data: { status: "CONFIRMED" }
     });
 
-    const existingQr = await tx.qrToken.findUnique({ where: { registrationId: payment.registrationId } });
+    const existingQr = await tx.qrToken.findUnique({
+      where: { registrationId: payment.registrationId }
+    });
+
     if (!existingQr) {
-      await createQrTokenForRegistration(tx, payment.registrationId);
+      await createQrTokenForRegistration(
+        tx,
+        payment.registrationId
+      );
     }
   });
 
@@ -163,6 +313,9 @@ export async function handleMockPaymentWebhook(payload: unknown) {
     body: "Your paid workshop registration has been confirmed."
   });
 
-  await publishWorkshopSeatUpdate(payment.registration.workshopId);
+  await publishWorkshopSeatUpdate(
+    payment.registration.workshopId
+  );
+
   return { ok: true };
 }

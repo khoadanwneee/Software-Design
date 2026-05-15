@@ -1,12 +1,12 @@
 import type { RegistrationDto } from "@unihub/shared-types";
 import { ErrorCodes, buildQrPayload } from "@unihub/shared-utils";
-import { Prisma, RegistrationStatus } from "@unihub/db";
+import { PaymentStatus, Prisma, RegistrationStatus } from "@unihub/db";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../common/errors/app-error.js";
 import { createQrTokenForRegistration } from "../../common/utils/qr-token.js";
 import { withIdempotency } from "../../common/utils/idempotency.js";
 import { publishNotificationJob } from "../notifications/queue.js";
-import { createPaymentAttempt } from "../payments/payment.service.js";
+import { createOrRefreshPaymentAttempt, createPaymentAttempt } from "../payments/payment.service.js";
 import { publishWorkshopSeatUpdate } from "../workshops/workshop-seat-events.js";
 
 async function assertVerifiedStudent(userId: string) {
@@ -129,13 +129,42 @@ export async function createPaidRegistration(input: {
     operation: async () => {
       const existing = await prisma.registration.findUnique({
         where: { userId_workshopId: { userId: input.userId, workshopId: input.workshopId } },
-        include: { payment: true }
+        include: { payment: true, workshop: true }
       });
       if (existing) {
-        return {
-          ...(await dtoForRegistration(existing.id)),
-          paymentUrl: existing.payment?.paymentUrl ?? null
-        };
+        const base = await dtoForRegistration(existing.id);
+
+        if (existing.status === RegistrationStatus.CONFIRMED) {
+          return { ...base, paymentUrl: null };
+        }
+
+        if (existing.payment?.status === PaymentStatus.PAID) {
+          return { ...base, paymentUrl: null };
+        }
+
+        const workshop = existing.workshop;
+        if (!workshop) {
+          throw new AppError(404, ErrorCodes.NOT_FOUND, "Workshop not found");
+        }
+
+        if (existing.status === RegistrationStatus.PAYMENT_FAILED) {
+          await prisma.$transaction(async (tx) => {
+            await reserveSeat(tx, input.workshopId);
+            await tx.registration.update({
+              where: { id: existing.id },
+              data: { status: RegistrationStatus.PENDING_PAYMENT }
+            });
+          });
+        }
+
+        const payment = await createOrRefreshPaymentAttempt({
+          registrationId: existing.id,
+          amount: Number(workshop.priceAmount),
+          currency: workshop.currency,
+          idempotencyKey: input.idempotencyKey
+        });
+
+        return { ...base, paymentUrl: payment.paymentUrl };
       }
 
       const registration = await prisma.$transaction(async (tx) => {

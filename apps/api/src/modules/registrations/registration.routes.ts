@@ -34,13 +34,13 @@ registrationRouter.post(
   paymentRateLimit,
   validateBody(createRegistrationSchema),
   asyncHandler(async (req, res) => {
-    res.status(201).json(
-      await createPaidRegistration({
-        userId: req.user!.id,
-        workshopId: req.body.workshopId,
-        idempotencyKey: req.body.idempotencyKey
-      })
-    );
+    const result = await createPaidRegistration({
+      userId: req.user!.id,
+      workshopId: req.body.workshopId,
+      idempotencyKey: req.body.idempotencyKey
+    });
+
+    res.status(201).json(result);
   })
 );
 

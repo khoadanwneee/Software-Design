@@ -14,7 +14,7 @@ export interface StudentImportUploadInput {
   importType: string;
   description?: string;
   dryRun?: boolean;
-  actorId: string;
+  actorId?: string;
   requestId?: string;
 }
 
@@ -99,22 +99,24 @@ export async function createStudentImportFromUpload(input: StudentImportUploadIn
       select: studentImportSelect()
     });
 
-    await tx.auditLog.create({
-      data: {
-        actorId: input.actorId,
-        action: "STUDENT_IMPORT_REQUESTED",
-        entityType: "StudentImportRun",
-        entityId: createdRun.id,
-        newValue: {
-          fileName: input.fileName,
-          importType: input.importType,
-          fileHash,
-          fileId: uploadedFile.id,
-          dryRun: input.dryRun ?? false
-        },
-        requestId: input.requestId
-      }
-    });
+    if (input.actorId) {
+      await tx.auditLog.create({
+        data: {
+          actorId: input.actorId,
+          action: "STUDENT_IMPORT_REQUESTED",
+          entityType: "StudentImportRun",
+          entityId: createdRun.id,
+          newValue: {
+            fileName: input.fileName,
+            importType: input.importType,
+            fileHash,
+            fileId: uploadedFile.id,
+            dryRun: input.dryRun ?? false
+          },
+          requestId: input.requestId
+        }
+      });
+    }
 
     return createdRun;
   });

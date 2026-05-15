@@ -1,11 +1,14 @@
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
+import { startStudentImportScheduler } from "./modules/student-import/student-import.scheduler.js";
 
 const app = createApp();
 
 const server = app.listen(env.API_PORT, () => {
   console.log(`UniHub API listening on http://localhost:${env.API_PORT}`);
 });
+
+startStudentImportScheduler();
 
 server.on("error", (error: NodeJS.ErrnoException) => {
   if (error.code === "EADDRINUSE") {

@@ -52,7 +52,17 @@ function WorkshopDetailContent({
 
   const registerPaid = useMutation({
     mutationFn: () => api.registrationApi.createPaid({ workshopId: id, idempotencyKey: createClientId("pay") }),
-    onSuccess: (registration) => setMessage(registration.paymentUrl ? `Payment URL: ${registration.paymentUrl}` : "Payment created"),
+    onSuccess: (registration) => {
+      if (registration.paymentUrl) {
+        window.location.assign(registration.paymentUrl);
+        return;
+      }
+      if (registration.status === "CONFIRMED") {
+        navigate(`/registrations/${registration.id}/qr`);
+        return;
+      }
+      setMessage("Ban da co giao dich thanh toan cho workshop nay. Vui long kiem tra trang QR.");
+    },
     onError: (error) => setMessage(error instanceof ApiClientError ? error.message : "Payment failed")
   });
 
