@@ -76,7 +76,7 @@ enum NotificationChannel {
 enum AiSummaryStatus {
   PENDING
   PROCESSING
-  COMPLETED
+  DONE
   FAILED
 }
 
@@ -86,6 +86,11 @@ enum StudentImportStatus {
   DONE
   DONE_WITH_ERRORS
   FAILED
+}
+
+enum UploadedFileType {
+  STUDENT_CSV
+  PDF
 }
 
 model User {
@@ -369,7 +374,6 @@ model AiDocument {
   createdAt   DateTime  @default(now()) @map("created_at")
   workshop    Workshop  @relation(fields: [workshopId], references: [id], onDelete: Cascade)
   uploadedBy  User      @relation("AiDocumentUploader", fields: [uploadedById], references: [id])
-  summaries   AiSummary[]
 
   @@index([workshopId])
   @@map("ai_documents")
@@ -378,24 +382,30 @@ model AiDocument {
 model AiSummary {
   id           String          @id @default(cuid())
   workshopId   String          @map("workshop_id")
-  documentId   String          @map("document_id")
+  uploadedFileId String        @map("uploaded_file_id")
   status       AiSummaryStatus @default(PENDING)
-  summaryText  String?         @map("summary_text")
+  summary      String?         @map("summary_text")
   errorMessage String?         @map("error_message")
-  modelVersion String?         @map("model_version")
+  model        String?         @map("model")
   promptVersion String?        @map("prompt_version")
+  attemptCount Int             @default(0) @map("attempt_count")
+  startedAt    DateTime?       @map("started_at")
+  completedAt  DateTime?       @map("completed_at")
   createdAt    DateTime        @default(now()) @map("created_at")
   updatedAt    DateTime        @updatedAt @map("updated_at")
   workshop     Workshop        @relation(fields: [workshopId], references: [id], onDelete: Cascade)
-  document     AiDocument      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedFile UploadedFile    @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
 
-  @@unique([workshopId, documentId])
+  @@unique([workshopId, uploadedFileId])
+  @@index([workshopId])
   @@index([status])
+  @@index([updatedAt])
   @@map("ai_summaries")
 }
 
 model UploadedFile {
   id             String             @id @default(cuid())
+  fileType       UploadedFileType   @default(STUDENT_CSV) @map("file_type")
   fileName       String             @map("file_name")
   contentType    String             @map("content_type")
   sizeBytes      Int                @map("size_bytes")
@@ -405,8 +415,10 @@ model UploadedFile {
   createdAt      DateTime           @default(now()) @map("created_at")
   uploadedBy     User?              @relation("UploadedFileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
   studentImports StudentImportRun[]
+  aiSummaries    AiSummary[]
 
   @@index([checksumSha256])
+  @@index([fileType])
   @@index([uploadedById])
   @@map("uploaded_files")
 }

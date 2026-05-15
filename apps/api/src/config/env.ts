@@ -17,7 +17,8 @@ const envSchema = z.object({
   RATE_LIMIT_REGISTRATION_POINTS: z.coerce.number().default(10),
   RATE_LIMIT_PAYMENT_POINTS: z.coerce.number().default(8),
   RATE_LIMIT_CHECKIN_SYNC_POINTS: z.coerce.number().default(30),
-  MAX_UPLOAD_BYTES: z.coerce.number().default(10 * 1024 * 1024)
+  MAX_UPLOAD_BYTES: z.coerce.number().default(10 * 1024 * 1024),
+  AI_SUMMARY_PDF_MAX_MB: z.coerce.number().positive().default(10)
 });
 
 export const env = envSchema.parse(process.env);

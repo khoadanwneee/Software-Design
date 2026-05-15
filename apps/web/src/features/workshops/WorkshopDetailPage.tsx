@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CreditCard, Ticket } from "lucide-react";
 import { ApiClientError } from "@unihub/api-client";
-import { Role, type WorkshopDto } from "@unihub/shared-types";
+import { AiSummaryStatus, Role, type WorkshopDto } from "@unihub/shared-types";
 import { createClientId } from "@unihub/shared-utils";
 import { api } from "../../lib/api";
 import { useAuth } from "../auth/AuthProvider";
@@ -73,7 +73,7 @@ function WorkshopDetailContent({
         </div>
         <div className="panel">
           <h2>AI Summary</h2>
-          <p>{workshop.aiSummary?.summaryText ?? `Status: ${workshop.aiSummary?.status ?? "UNAVAILABLE"}`}</p>
+          <p>{summaryDisplay(workshop)}</p>
         </div>
       </div>
       {message ? <p className="notice">{message}</p> : null}
@@ -92,4 +92,19 @@ function WorkshopDetailContent({
       )}
     </article>
   );
+}
+
+function summaryDisplay(workshop: WorkshopDto) {
+  if (workshop.aiSummary?.status === AiSummaryStatus.DONE && workshop.aiSummary.summary) {
+    return workshop.aiSummary.summary;
+  }
+
+  if (
+    workshop.aiSummary?.status === AiSummaryStatus.PENDING ||
+    workshop.aiSummary?.status === AiSummaryStatus.PROCESSING
+  ) {
+    return "Đang tạo tóm tắt AI.";
+  }
+
+  return "Chưa có tóm tắt AI.";
 }

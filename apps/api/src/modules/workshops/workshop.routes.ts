@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { Role, type WorkshopListFilters, type WorkshopSeatAvailabilityDto } from "@unihub/shared-types";
 import { asyncHandler } from "../../common/utils/async-handler.js";
+import { env } from "../../config/env.js";
 import { validateBody, validateQuery } from "../../common/middleware/validate.js";
+import { readMultipartFormData } from "../../common/utils/multipart.js";
 import { requireAuth, requireRole } from "../auth/auth.middleware.js";
 import { createWorkshopSchema, updateWorkshopSchema, workshopListQuerySchema } from "./workshop.schemas.js";
 import {
@@ -9,7 +11,8 @@ import {
   createWorkshop,
   getWorkshopDetail,
   listWorkshops,
-  updateWorkshop
+  updateWorkshop,
+  uploadWorkshopPdfSummary
 } from "./workshop.service.js";
 import { getWorkshopSeatAvailability, subscribeWorkshopSeatUpdates } from "./workshop-seat-events.js";
 
@@ -102,6 +105,30 @@ workshopRouter.get(
   asyncHandler(async (req, res) => {
     const canSeeDraft = req.user?.roles.some((role) => [Role.ADMIN, Role.ORGANIZER].includes(role)) ?? false;
     res.json(await getWorkshopDetail(String(req.params.id), canSeeDraft));
+  })
+);
+
+workshopRouter.post(
+  "/:id/pdf",
+  requireRole([Role.ORGANIZER, Role.ADMIN]),
+  asyncHandler(async (req, res) => {
+    const maxBodyBytes = Math.ceil(env.AI_SUMMARY_PDF_MAX_MB * 1024 * 1024) + 1024 * 1024;
+    const form = await readMultipartFormData(req, maxBodyBytes);
+    const file = form.files.find((candidate) => candidate.fieldName === "file");
+    if (!file) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "PDF file is required" } });
+    }
+
+    const result = await uploadWorkshopPdfSummary({
+      workshopId: String(req.params.id),
+      fileName: file.fileName,
+      contentType: file.contentType,
+      buffer: file.buffer,
+      actorId: req.user!.id,
+      requestId: req.requestId
+    });
+
+    return res.status(202).json(result);
   })
 );
 

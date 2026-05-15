@@ -1,15 +1,17 @@
 import { AiSummaryStatus, type WorkshopDto, type WorkshopListFilters } from "@unihub/shared-types";
 import { ErrorCodes } from "@unihub/shared-utils";
-import { Prisma, WorkshopStatus as PrismaWorkshopStatus } from "@unihub/db";
+import { buildStorageKey, localObjectStorage, Prisma, WorkshopStatus as PrismaWorkshopStatus } from "@unihub/db";
+import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../common/errors/app-error.js";
-import { publishNotificationJob } from "../notifications/queue.js";
+import { sha256Buffer } from "../../common/utils/crypto.js";
+import { aiSummaryQueue, publishNotificationJob } from "../notifications/queue.js";
 import { publishWorkshopSeatUpdate } from "./workshop-seat-events.js";
 
 const workshopInclude = {
   room: true,
   speakerLinks: { include: { speaker: true } },
-  aiSummaries: { orderBy: { createdAt: "desc" as const }, take: 1 }
+  aiSummaries: { orderBy: { createdAt: "desc" as const } }
 };
 
 type WorkshopWithRelations = Prisma.WorkshopGetPayload<{ include: typeof workshopInclude }>;
@@ -28,8 +30,18 @@ interface WorkshopInput {
   speakerIds?: string[];
 }
 
+interface WorkshopPdfUploadInput {
+  workshopId: string;
+  fileName: string;
+  contentType: string;
+  buffer: Buffer;
+  actorId: string;
+  requestId?: string;
+}
+
 export function toWorkshopDto(workshop: WorkshopWithRelations): WorkshopDto {
-  const aiSummary = workshop.aiSummaries[0];
+  const aiSummary =
+    workshop.aiSummaries.find((summary) => summary.status === AiSummaryStatus.DONE) ?? workshop.aiSummaries[0];
   return {
     id: workshop.id,
     slug: workshop.slug,
@@ -60,10 +72,41 @@ export function toWorkshopDto(workshop: WorkshopWithRelations): WorkshopDto {
     aiSummary: aiSummary
       ? {
           status: aiSummary.status as AiSummaryStatus,
-          summaryText: aiSummary.summaryText
+          summary: aiSummary.status === AiSummaryStatus.DONE ? aiSummary.summary : null,
+          updatedAt: aiSummary.updatedAt?.toISOString() ?? null
         }
       : null
   };
+}
+
+function maxPdfBytes() {
+  return Math.floor(env.AI_SUMMARY_PDF_MAX_MB * 1024 * 1024);
+}
+
+function normalizedContentType(value: string) {
+  return value.split(";")[0].trim().toLowerCase();
+}
+
+function assertPdfUpload(input: { fileName: string; contentType: string; buffer: Buffer }) {
+  if (input.buffer.byteLength <= 0) {
+    throw new AppError(400, ErrorCodes.VALIDATION_ERROR, "PDF file is empty");
+  }
+
+  if (input.buffer.byteLength > maxPdfBytes()) {
+    throw new AppError(400, ErrorCodes.VALIDATION_ERROR, `PDF exceeds ${env.AI_SUMMARY_PDF_MAX_MB}MB limit`);
+  }
+
+  if (!input.fileName.toLowerCase().endsWith(".pdf")) {
+    throw new AppError(400, ErrorCodes.VALIDATION_ERROR, "File must use .pdf extension");
+  }
+
+  if (normalizedContentType(input.contentType) !== "application/pdf") {
+    throw new AppError(400, ErrorCodes.VALIDATION_ERROR, "Unsupported PDF content type");
+  }
+
+  if (input.buffer.subarray(0, 4).toString("latin1") !== "%PDF") {
+    throw new AppError(400, ErrorCodes.VALIDATION_ERROR, "File content is not a valid PDF");
+  }
 }
 
 function slugify(title: string) {
@@ -168,6 +211,80 @@ export async function getWorkshopDetail(id: string, canSeeDraft = false) {
     throw new AppError(404, ErrorCodes.NOT_FOUND, "Workshop not found");
   }
   return toWorkshopDto(workshop);
+}
+
+export async function uploadWorkshopPdfSummary(input: WorkshopPdfUploadInput) {
+  assertPdfUpload(input);
+
+  const workshop = await prisma.workshop.findUnique({ where: { id: input.workshopId } });
+  if (!workshop) {
+    throw new AppError(404, ErrorCodes.NOT_FOUND, "Workshop not found");
+  }
+
+  const checksumSha256 = sha256Buffer(input.buffer);
+  const storageKey = buildStorageKey(`workshop-pdfs/${input.workshopId}`, input.fileName);
+  await localObjectStorage.putObject({ key: storageKey, body: input.buffer });
+
+  const result = await prisma.$transaction(async (tx) => {
+    const uploadedFile = await tx.uploadedFile.create({
+      data: {
+        fileType: "PDF",
+        fileName: input.fileName,
+        contentType: "application/pdf",
+        sizeBytes: input.buffer.byteLength,
+        storageKey,
+        checksumSha256,
+        uploadedById: input.actorId
+      }
+    });
+
+    const summary = await tx.aiSummary.create({
+      data: {
+        workshopId: input.workshopId,
+        uploadedFileId: uploadedFile.id,
+        status: AiSummaryStatus.PENDING,
+        summary: null,
+        errorMessage: null,
+        attemptCount: 0,
+        promptVersion: "summary-vi-v1"
+      }
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorId: input.actorId,
+        action: "AI_SUMMARY_REQUESTED",
+        entityType: "AiSummary",
+        entityId: summary.id,
+        newValue: {
+          workshopId: input.workshopId,
+          uploadedFileId: uploadedFile.id,
+          fileName: input.fileName,
+          checksumSha256
+        },
+        requestId: input.requestId
+      }
+    });
+
+    return { uploadedFile, summary };
+  });
+
+  await aiSummaryQueue.add(
+    "ai_summary.requested",
+    {
+      workshopId: input.workshopId,
+      uploadedFileId: result.uploadedFile.id,
+      aiSummaryId: result.summary.id,
+      requestedBy: input.actorId
+    },
+    { jobId: result.summary.id }
+  );
+
+  return {
+    uploadedFileId: result.uploadedFile.id,
+    aiSummaryId: result.summary.id,
+    status: result.summary.status
+  };
 }
 
 export async function createWorkshop(actorId: string, input: WorkshopInput) {

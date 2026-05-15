@@ -6,6 +6,7 @@ import {
   QrTokenStatus,
   RegistrationStatus,
   Role,
+  UploadedFileType,
   WorkshopStatus
 } from "@prisma/client";
 
@@ -219,38 +220,46 @@ async function main() {
     data: { registeredCount: 1 }
   });
 
-  const aiDoc =
-    (await prisma.aiDocument.findFirst({
-      where: { workshopId: freeWorkshop.id, fileName: "ai-career-starter.pdf" }
-    })) ??
-    (await prisma.aiDocument.create({
-      data: {
-        workshopId: freeWorkshop.id,
-        uploadedById: organizer.id,
-        fileName: "ai-career-starter.pdf",
-        contentType: "application/pdf",
-        sizeBytes: 204800,
-        storageKey: "seed/ai-career-starter.pdf"
-      }
-    }));
+  const aiPdfFile = await prisma.uploadedFile.upsert({
+    where: { storageKey: "seed/ai-career-starter.pdf" },
+    update: {
+      fileType: UploadedFileType.PDF,
+      fileName: "ai-career-starter.pdf",
+      contentType: "application/pdf",
+      sizeBytes: 204800,
+      checksumSha256: sha256("seed/ai-career-starter.pdf"),
+      uploadedById: organizer.id
+    },
+    create: {
+      fileType: UploadedFileType.PDF,
+      fileName: "ai-career-starter.pdf",
+      contentType: "application/pdf",
+      sizeBytes: 204800,
+      storageKey: "seed/ai-career-starter.pdf",
+      checksumSha256: sha256("seed/ai-career-starter.pdf"),
+      uploadedById: organizer.id
+    }
+  });
 
   await prisma.aiSummary.upsert({
     where: {
-      workshopId_documentId: {
+      workshopId_uploadedFileId: {
         workshopId: freeWorkshop.id,
-        documentId: aiDoc.id
+        uploadedFileId: aiPdfFile.id
       }
     },
     update: {
-      status: AiSummaryStatus.COMPLETED,
-      summaryText: "Bản tóm tắt demo: workshop giúp sinh viên hiểu cách dùng AI trong định hướng nghề nghiệp."
+      status: AiSummaryStatus.DONE,
+      summary: "Bản tóm tắt demo: workshop giúp sinh viên hiểu cách dùng AI trong định hướng nghề nghiệp.",
+      model: "mock-ai-v1",
+      completedAt: new Date()
     },
     create: {
       workshopId: freeWorkshop.id,
-      documentId: aiDoc.id,
-      status: AiSummaryStatus.COMPLETED,
-      summaryText: "Bản tóm tắt demo: workshop giúp sinh viên hiểu cách dùng AI trong định hướng nghề nghiệp.",
-      modelVersion: "mock-ai-v1",
+      uploadedFileId: aiPdfFile.id,
+      status: AiSummaryStatus.DONE,
+      summary: "Bản tóm tắt demo: workshop giúp sinh viên hiểu cách dùng AI trong định hướng nghề nghiệp.",
+      model: "mock-ai-v1",
       promptVersion: "summary-vi-v1"
     }
   });

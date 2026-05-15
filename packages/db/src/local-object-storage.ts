@@ -69,5 +69,10 @@ export const localObjectStorage = {
   async readText(key: string) {
     const filePath = resolveStorageKey(key);
     return readFile(filePath, "utf8");
+  },
+
+  async readObject(key: string) {
+    const filePath = resolveStorageKey(key);
+    return readFile(filePath);
   }
 };

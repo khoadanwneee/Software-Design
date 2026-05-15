@@ -1,12 +1,14 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileUp } from "lucide-react";
 import { api } from "../../lib/api";
 
 export function AdminAiSummaryPage() {
+  const queryClient = useQueryClient();
   const [workshopId, setWorkshopId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const workshops = useQuery({ queryKey: ["workshops"], queryFn: () => api.workshopApi.list() });
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -17,13 +19,20 @@ export function AdminAiSummaryPage() {
       return;
     }
 
-    const result = await api.aiSummaryApi.uploadMetadata({
-      workshopId,
-      fileName: file.name,
-      contentType: file.type || "application/pdf",
-      size: file.size
-    });
-    setMessage(`AI job ${result.status}: ${result.aiDocumentId}`);
+    setUploading(true);
+    setMessage(null);
+    try {
+      const uploadForm = new FormData();
+      uploadForm.set("file", file);
+      const result = await api.aiSummaryApi.uploadPdf(workshopId, uploadForm);
+      setMessage(`AI job ${result.status}: ${result.aiSummaryId}`);
+      await queryClient.invalidateQueries({ queryKey: ["workshops"] });
+      await queryClient.invalidateQueries({ queryKey: ["workshop", workshopId] });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -45,7 +54,7 @@ export function AdminAiSummaryPage() {
           PDF
           <input name="file" type="file" accept="application/pdf" />
         </label>
-        <button className="full" type="submit">
+        <button className="full" type="submit" disabled={uploading}>
           <FileUp size={18} /> Upload
         </button>
       </form>

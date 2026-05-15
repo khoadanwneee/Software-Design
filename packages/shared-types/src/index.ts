@@ -76,7 +76,7 @@ export type NotificationListStatus = NotificationReadStatus | "ALL";
 export enum AiSummaryStatus {
   PENDING = "PENDING",
   PROCESSING = "PROCESSING",
-  COMPLETED = "COMPLETED",
+  DONE = "DONE",
   FAILED = "FAILED"
 }
 
@@ -88,8 +88,14 @@ export enum StudentImportStatus {
   FAILED = "FAILED"
 }
 
+export enum UploadedFileType {
+  STUDENT_CSV = "STUDENT_CSV",
+  PDF = "PDF"
+}
+
 export interface UploadedFileDto {
   id: string;
+  fileType?: UploadedFileType;
   fileName: string;
   contentType: string;
   sizeBytes: number;
@@ -151,7 +157,8 @@ export interface WorkshopDto {
   speakers: SpeakerDto[];
   aiSummary?: {
     status: AiSummaryStatus;
-    summaryText?: string | null;
+    summary: string | null;
+    updatedAt: string | null;
   } | null;
 }
 
@@ -321,6 +328,12 @@ export interface StudentImportUploadResponse {
   totalRows: number;
   message: string;
   run: StudentImportRunDto;
+}
+
+export interface AiSummaryUploadResponse {
+  uploadedFileId: string;
+  aiSummaryId: string;
+  status: AiSummaryStatus.PENDING;
 }
 
 export interface RegistrationDto {

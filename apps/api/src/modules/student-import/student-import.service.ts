@@ -76,6 +76,7 @@ export async function createStudentImportFromUpload(input: StudentImportUploadIn
   const run = await prisma.$transaction(async (tx) => {
     const uploadedFile = await tx.uploadedFile.create({
       data: {
+        fileType: "STUDENT_CSV",
         fileName: input.fileName,
         contentType: input.contentType || "text/csv",
         sizeBytes: input.buffer.byteLength,
