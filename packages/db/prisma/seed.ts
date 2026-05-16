@@ -86,6 +86,35 @@ async function main() {
     [Role.CHECKIN_STAFF]
   );
 
+  const student = await upsertUser(
+    "giabao.150905@gmail.com",
+    "Gia Bao",
+    [Role.STUDENT]
+  );
+
+  await prisma.studentProfile.upsert({
+    where: { userId: student.id },
+    update: {
+      studentCode: "SV150905",
+      email: student.email,
+      fullName: student.fullName,
+      major: "Software Engineering",
+      className: "SE-K2023",
+      verifiedAt: new Date(),
+      importedAt: new Date()
+    },
+    create: {
+      userId: student.id,
+      studentCode: "SV150905",
+      email: student.email,
+      fullName: student.fullName,
+      major: "Software Engineering",
+      className: "SE-K2023",
+      verifiedAt: new Date(),
+      importedAt: new Date()
+    }
+  });
+
   // =========================
   // ROOMS
   // =========================
@@ -772,7 +801,8 @@ async function main() {
         demoAccounts: [
           "admin@unihub.local",
           "organizer@unihub.local",
-          "staff@unihub.local"
+          "staff@unihub.local",
+          "giabao.150905@gmail.com"
         ]
       }
     }

@@ -38,6 +38,7 @@ interface SmtpConfig {
   host: string;
   port: number;
   secure: boolean;
+  tlsRejectUnauthorized: boolean;
   user?: string;
   pass?: string;
   from: string;
@@ -53,6 +54,9 @@ class SmtpEmailProvider implements EmailProvider {
       host: config.host,
       port: config.port,
       secure: config.secure,
+      tls: {
+        rejectUnauthorized: config.tlsRejectUnauthorized
+      },
       auth: config.user ? { user: config.user, pass: config.pass ?? "" } : undefined
     });
   }
@@ -88,12 +92,14 @@ function buildEmailProvider(): EmailProvider {
 
   const port = toNumber(process.env.SMTP_PORT, 1025);
   const secure = toBoolean(process.env.SMTP_SECURE, false);
+  const tlsRejectUnauthorized = toBoolean(process.env.SMTP_TLS_REJECT_UNAUTHORIZED, true);
   const from = process.env.SMTP_FROM?.trim() || "UniHub <no-reply@unihub.local>";
 
   return new SmtpEmailProvider({
     host,
     port,
     secure,
+    tlsRejectUnauthorized,
     user: process.env.SMTP_USER?.trim() || undefined,
     pass: process.env.SMTP_PASS?.trim() || undefined,
     from

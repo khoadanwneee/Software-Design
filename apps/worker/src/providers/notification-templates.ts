@@ -17,6 +17,7 @@ const TEMPLATES: Record<string, ChannelTemplates> = {
         "Hello {{userName}},",
         "",
         "You have successfully registered for \"{{workshopTitle}}\".",
+        "Workshop details: {{workshopUrl}}",
         "Please check your QR code in UniHub before check-in.",
         "",
         "UniHub Team"
@@ -39,6 +40,7 @@ const TEMPLATES: Record<string, ChannelTemplates> = {
         "Hello {{userName}},",
         "",
         "\"{{workshopTitle}}\" has schedule or room updates.",
+        "View details: {{workshopUrl}}",
         "Please open UniHub to see the latest details.",
         "",
         "UniHub Team"
@@ -61,6 +63,7 @@ const TEMPLATES: Record<string, ChannelTemplates> = {
         "Hello {{userName}},",
         "",
         "\"{{workshopTitle}}\" has been cancelled.",
+        "View details: {{workshopUrl}}",
         "We are sorry for the inconvenience.",
         "",
         "UniHub Team"
@@ -84,6 +87,7 @@ const TEMPLATES: Record<string, ChannelTemplates> = {
         "",
         "This is a reminder that \"{{workshopTitle}}\" starts in {{reminderLabel}}.",
         "Start time: {{workshopStartTime}}.",
+        "Workshop details: {{workshopUrl}}",
         "",
         "UniHub Team"
       ].join("\n")

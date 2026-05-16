@@ -10,6 +10,16 @@ import { useAuth } from "../auth/AuthProvider";
 import { AiSummaryRichText, AiSummaryStatusBadge } from "../ai-summary/AiSummaryRichText";
 import { useWorkshopSeatAvailability } from "./useWorkshopSeatAvailability";
 
+function refreshNotificationQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  const delays = [0, 1000, 2500, 5000];
+  for (const delay of delays) {
+    setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
+    }, delay);
+  }
+}
+
 export function WorkshopDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -69,6 +79,7 @@ function WorkshopDetailContent({
   onRegistrationConfirmed: (registrationId: string, workshopId: string) => void;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const seat = useWorkshopSeatAvailability(workshop);
   const isStudent = userRoles.includes(Role.STUDENT);
   const canRegister = isStudent && seat.status === "PUBLISHED" && seat.remainingSeats > 0;
@@ -79,6 +90,7 @@ function WorkshopDetailContent({
     mutationFn: () => api.registrationApi.createFree({ workshopId: id, idempotencyKey: createClientId("reg") }),
     onSuccess: (registration) => {
       onRegistrationConfirmed(registration.id, id);
+      refreshNotificationQueries(queryClient);
       navigate(`/registrations/${registration.id}/qr`);
     },
     onError: (error) => setMessage(error instanceof ApiClientError ? error.message : "Registration failed")
@@ -93,6 +105,7 @@ function WorkshopDetailContent({
       }
       if (registration.status === "CONFIRMED") {
         onRegistrationConfirmed(registration.id, id);
+        refreshNotificationQueries(queryClient);
         navigate(`/registrations/${registration.id}/qr`);
         return;
       }

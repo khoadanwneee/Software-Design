@@ -253,6 +253,7 @@ export async function processNotification(
 
   let workshopTitle = "";
   let workshopStartTime = "";
+  let workshopUrl = "";
   if (data.workshopId) {
     const workshop = await deps.prisma.workshop.findUnique({
       where: { id: data.workshopId },
@@ -260,12 +261,17 @@ export async function processNotification(
     });
     workshopTitle = workshop?.title ?? "";
     workshopStartTime = workshop?.startTime ? new Date(workshop.startTime).toISOString() : "";
+    const appOrigin = (process.env.APP_ORIGIN ?? "").trim().replace(/\/+$/, "");
+    if (appOrigin) {
+      workshopUrl = `${appOrigin}/workshops/${data.workshopId}`;
+    }
   }
 
   const templateVars: Record<string, string> = {
     userName: user.fullName,
     workshopTitle,
     workshopStartTime,
+    workshopUrl,
     reminderLabel: "",
     ...metadataStrings(data.metadata)
   };
