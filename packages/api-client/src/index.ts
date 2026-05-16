@@ -225,6 +225,10 @@ export function createApiClient(options: ApiClientOptions) {
         client.request<RegistrationDto>("/registrations", { method: "POST", body: JSON.stringify(body) }),
       createPaid: (body: CreateRegistrationRequest) =>
         client.request<RegistrationDto>("/registrations/paid", { method: "POST", body: JSON.stringify(body) }),
+      myByWorkshop: (workshopId: string) =>
+        client.request<{ id: string; workshopId: string; status: string } | null>(
+          `/registrations/me${toQueryString({ workshopId })}`
+        ),
       qr: (id: string) => client.request<{ registrationId: string; qrPayload: string }>(`/registrations/${id}/qr`)
     },
     paymentApi: {

@@ -6,7 +6,7 @@ import { AppError } from "../../common/errors/app-error.js";
 import { asyncHandler } from "../../common/utils/async-handler.js";
 import { validateBody } from "../../common/middleware/validate.js";
 import { requireAuth, requireRole } from "../auth/auth.middleware.js";
-import { aiSummaryQueue } from "../notifications/queue.js";
+import { aiSummaryQueue } from "../../common/queues.js";
 import { aiDocumentMetadataSchema } from "./ai-summary.schemas.js";
 
 export const aiSummaryRouter = Router();

@@ -3,7 +3,7 @@ import { ErrorCodes } from "@unihub/shared-utils";
 import { Prisma, WorkshopStatus as PrismaWorkshopStatus } from "@unihub/db";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../common/errors/app-error.js";
-import { publishNotificationJob } from "../notifications/queue.js";
+import { publishNotificationJob } from "../notifications/publish-notification-job.js";
 import { publishWorkshopSeatUpdate } from "./workshop-seat-events.js";
 
 const workshopInclude = {

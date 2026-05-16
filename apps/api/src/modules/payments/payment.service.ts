@@ -1,14 +1,58 @@
 import { ErrorCodes } from "@unihub/shared-utils";
-import { PaymentStatus } from "@unihub/db";
+import { PaymentStatus, RegistrationStatus } from "@unihub/db";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../common/errors/app-error.js";
 import { createQrTokenForRegistration } from "../../common/utils/qr-token.js";
-import { publishNotificationJob } from "../notifications/queue.js";
+import { publishNotificationJob } from "../notifications/publish-notification-job.js";
 import { executePaymentCall } from "./payment-circuit-breaker.js";
 import { paymentProvider } from "./payment-provider.js";
 import { publishWorkshopSeatUpdate } from "../workshops/workshop-seat-events.js";
 
 const VNP_RETURN_URL = process.env.VNP_RETURN_URL?.trim() ?? "";
+
+function isPaymentUrlValid(paymentUrl: string) {
+  if (!paymentUrl) {
+    return false;
+  }
+  if (!paymentUrl.startsWith("http")) {
+    return false;
+  }
+  if (paymentUrl.includes(" ")) {
+    return false;
+  }
+  if (!paymentUrl.includes("vnp_SecureHashType=")) {
+    return false;
+  }
+  if (VNP_RETURN_URL && !paymentUrl.includes(encodeURIComponent(VNP_RETURN_URL))) {
+    return false;
+  }
+  return true;
+}
+
+async function createPaymentSession(input: {
+  registrationId: string;
+  amount: number;
+  currency: string;
+  idempotencyKey: string;
+}) {
+  // 1. ONLY VNPay call is inside CB
+  const session = await executePaymentCall(() =>
+    paymentProvider.createSession({
+      registrationId: input.registrationId,
+      amount: input.amount,
+      currency: input.currency,
+      idempotencyKey: input.idempotencyKey
+    })
+  );
+
+  // 2. validation OUTSIDE CB
+  if (!isPaymentUrlValid(session.paymentUrl)) {
+    console.error("[PAYMENT] Invalid URL:", session.paymentUrl);
+    throw new Error("Invalid payment URL (BUG or misconfig)");
+  }
+
+  return session;
+}
 
 //
 // =====================================
@@ -35,14 +79,7 @@ export async function createPaymentAttempt(input: {
   }
 
   try {
-    const session = await executePaymentCall(() =>
-      paymentProvider.createSession({
-        registrationId: input.registrationId,
-        amount: input.amount,
-        currency: input.currency,
-        idempotencyKey: input.idempotencyKey
-      })
-    );
+    const session = await createPaymentSession(input);
 
     const payment = await prisma.payment.create({
       data: {
@@ -82,7 +119,7 @@ export async function createPaymentAttempt(input: {
     throw new AppError(
       503,
       ErrorCodes.PAYMENT_UNAVAILABLE,
-      "Payment gateway is temporarily unavailable"
+      "Payment gateway is down"
     );
   }
 }
@@ -105,6 +142,7 @@ export async function createOrRefreshPaymentAttempt(input: {
     !existing.paymentUrl ||
     existing.paymentUrl.includes(" ") ||
     existing.status === PaymentStatus.FAILED ||
+    existing.status === PaymentStatus.EXPIRED ||
     existing.status === PaymentStatus.INIT_FAILED ||
     !existing.paymentUrl.includes("vnp_SecureHashType=") ||
     (VNP_RETURN_URL
@@ -121,14 +159,7 @@ export async function createOrRefreshPaymentAttempt(input: {
   }
 
   try {
-    const session = await executePaymentCall(() =>
-      paymentProvider.createSession({
-        registrationId: input.registrationId,
-        amount: input.amount,
-        currency: input.currency,
-        idempotencyKey: input.idempotencyKey
-      })
-    );
+    const session = await createPaymentSession(input);
 
     const payment = await prisma.payment.update({
       where: { id: existing.id },
@@ -149,18 +180,24 @@ export async function createOrRefreshPaymentAttempt(input: {
       paymentUrl: session.paymentUrl,
       status: payment.status
     };
-  } catch {
+  } catch (err: any) {
     await prisma.payment
       .update({
         where: { id: existing.id },
         data: { status: PaymentStatus.INIT_FAILED }
       })
       .catch(() => undefined);
+    
+
+    if (err instanceof AppError) {
+      throw err; 
+    }
+
 
     throw new AppError(
       503,
       ErrorCodes.PAYMENT_UNAVAILABLE,
-      "Payment gateway is temporarily unavailable"
+      "Payment gateway is failed"
     );
   }
 }
@@ -246,6 +283,23 @@ export async function handleVNPayIPN(query: any) {
         payload: query as object
       }
     });
+  }
+
+  if (
+    payment.status === PaymentStatus.EXPIRED ||
+    payment.registration.status !== RegistrationStatus.PENDING_PAYMENT
+  ) {
+    if (verification.status === "success") {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.NEEDS_MANUAL_REVIEW,
+          providerTransactionId: verification.providerTransactionId
+        }
+      });
+    }
+
+    return { ok: true, ignored: true };
   }
 
   if (verification.status === "failed") {

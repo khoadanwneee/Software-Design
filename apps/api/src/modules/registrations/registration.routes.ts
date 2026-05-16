@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { Role } from "@unihub/shared-types";
 import { asyncHandler } from "../../common/utils/async-handler.js";
-import { validateBody } from "../../common/middleware/validate.js";
+import { validateBody, validateQuery } from "../../common/middleware/validate.js";
 import { paymentRateLimit, registrationRateLimit } from "../../common/middleware/rate-limit.js";
 import { requireAuth, requireRole } from "../auth/auth.middleware.js";
-import { createRegistrationSchema } from "./registration.schemas.js";
-import { createFreeRegistration, createPaidRegistration, getRegistrationQr } from "./registration.service.js";
+import { createRegistrationSchema, myRegistrationQuerySchema } from "./registration.schemas.js";
+import { createFreeRegistration, createPaidRegistration, getMyRegistrationByWorkshop, getRegistrationQr } from "./registration.service.js";
 
 export const registrationRouter = Router();
 
@@ -22,6 +22,19 @@ registrationRouter.post(
         userId: req.user!.id,
         workshopId: req.body.workshopId,
         idempotencyKey: req.body.idempotencyKey
+      })
+    );
+  })
+);
+
+registrationRouter.get(
+  "/me",
+  validateQuery(myRegistrationQuerySchema),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await getMyRegistrationByWorkshop({
+        userId: req.user!.id,
+        workshopId: String(req.query.workshopId)
       })
     );
   })
