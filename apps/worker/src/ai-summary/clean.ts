@@ -1,4 +1,5 @@
 const DEFAULT_MAX_INPUT_CHARS = 30_000;
+const CONTROL_CHARS_PATTERN = "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]";
 
 function maxInputChars() {
   const parsed = Number(process.env.AI_SUMMARY_MAX_INPUT_CHARS);
@@ -43,7 +44,7 @@ export function cleanPdfText(raw: string, maxLength = maxInputChars()) {
   const normalized = raw
     .normalize("NFKC")
     .replace(/\r\n?/g, "\n")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+    .replace(new RegExp(CONTROL_CHARS_PATTERN, "g"), "");
 
   const lines = normalized.split("\n").map(normalizeLine);
   const noiseLines = repeatedNoiseLines(lines);

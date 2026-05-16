@@ -234,11 +234,21 @@ h2 {
 }
 
 .badge {
+  align-items: center;
   border-radius: 999px;
+  display: inline-flex;
   font-size: 0.78rem;
   font-weight: 800;
+  gap: 5px;
   justify-self: start;
   padding: 4px 9px;
+}
+
+.badge-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .badge.free {
@@ -261,6 +271,26 @@ h2 {
   color: #475569;
 }
 
+.badge.ai-done {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.badge.ai-processing {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge.ai-failed {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge.ai-empty {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 .sold-out {
   color: #b91c1c;
   font-weight: 750;
@@ -273,6 +303,19 @@ progress {
 
 .panel {
   padding: 18px;
+}
+
+.panel-title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.panel-title-row h2 {
+  margin-bottom: 0;
 }
 
 .detail {
@@ -479,6 +522,49 @@ th {
 
 .upload-action input {
   display: none;
+}
+
+.ai-summary-result {
+  border-top: 1px solid #e2e8f0;
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.ai-summary-result-header {
+  align-items: center;
+  color: #334155;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ai-summary-rich {
+  color: #334155;
+  display: grid;
+  gap: 10px;
+}
+
+.ai-summary-rich p,
+.ai-summary-rich ul,
+.ai-summary-rich ol {
+  margin-bottom: 0;
+}
+
+.ai-summary-rich ul,
+.ai-summary-rich ol {
+  padding-left: 22px;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 760px) {

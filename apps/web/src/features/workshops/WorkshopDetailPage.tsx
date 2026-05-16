@@ -7,6 +7,7 @@ import { AiSummaryStatus, Role, type WorkshopDto } from "@unihub/shared-types";
 import { createClientId } from "@unihub/shared-utils";
 import { api } from "../../lib/api";
 import { useAuth } from "../auth/AuthProvider";
+import { AiSummaryRichText, AiSummaryStatusBadge } from "../ai-summary/AiSummaryRichText";
 import { useWorkshopSeatAvailability } from "./useWorkshopSeatAvailability";
 
 export function WorkshopDetailPage() {
@@ -82,8 +83,15 @@ function WorkshopDetailContent({
           <p>Diễn giả: {workshop.speakers.map((speaker) => speaker.fullName).join(", ")}</p>
         </div>
         <div className="panel">
-          <h2>AI Summary</h2>
-          <p>{summaryDisplay(workshop)}</p>
+          <div className="panel-title-row">
+            <h2>AI Summary</h2>
+            <AiSummaryStatusBadge status={workshop.aiSummary?.status} />
+          </div>
+          {workshop.aiSummary?.status === AiSummaryStatus.DONE && workshop.aiSummary.summary ? (
+            <AiSummaryRichText summary={workshop.aiSummary.summary} />
+          ) : (
+            <p>{summaryDisplay(workshop)}</p>
+          )}
         </div>
       </div>
       {message ? <p className="notice">{message}</p> : null}

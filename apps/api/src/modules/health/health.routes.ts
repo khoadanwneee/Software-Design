@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../../config/prisma.js";
-import { redis } from "../../config/redis.js";
+import { ensureRedisReady, redis } from "../../config/redis.js";
 import { asyncHandler } from "../../common/utils/async-handler.js";
 
 export const healthRouter = Router();
@@ -20,9 +20,7 @@ healthRouter.get(
 healthRouter.get(
   "/redis",
   asyncHandler(async (_req, res) => {
-    if (redis.status === "wait") {
-      await redis.connect();
-    }
+    await ensureRedisReady();
     await redis.ping();
     res.json({ status: "ok", component: "redis" });
   })

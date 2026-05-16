@@ -244,7 +244,7 @@ async function notifyImportFinished(
     where: { roles: { has: Role.ADMIN }, status: "ACTIVE" },
     select: { id: true }
   });
-  const userIds = new Set(admins.map((admin) => admin.id));
+  const userIds = new Set(admins.map((admin: { id: string }) => admin.id));
   if (creatorId) {
     userIds.add(creatorId);
   }

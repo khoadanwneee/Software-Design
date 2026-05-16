@@ -1,6 +1,7 @@
 import type {
   AdminUserDto,
   AiSummaryUploadResponse,
+  AiSummaryDto,
   CreateRoomRequest,
   CreateRegistrationRequest,
   CreateWorkshopRequest,
@@ -289,6 +290,7 @@ export function createApiClient(options: ApiClientOptions) {
         }>("/admin/statistics")
     },
     aiSummaryApi: {
+      detail: (id: string) => client.request<AiSummaryDto>(`/ai-summary/${id}`),
       uploadPdf: (workshopId: string, body: FormData) =>
         client.request<AiSummaryUploadResponse>(`/workshops/${workshopId}/pdf`, {
           method: "POST",

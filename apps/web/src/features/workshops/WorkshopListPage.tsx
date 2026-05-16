@@ -5,6 +5,7 @@ import { CalendarDays, MapPin, Search, X } from "lucide-react";
 import type { WorkshopDto, WorkshopListFilters, WorkshopPriceType } from "@unihub/shared-types";
 import { api } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
+import { AiSummaryStatusBadge } from "../ai-summary/AiSummaryRichText";
 import { useWorkshopSeatAvailability } from "./useWorkshopSeatAvailability";
 
 export function WorkshopListPage() {
@@ -143,9 +144,12 @@ function WorkshopCard({ workshop }: { workshop: WorkshopDto }) {
 
   return (
     <Link to={`/workshops/${workshop.id}`} className="workshop-card">
-      <span className={workshop.priceAmount > 0 ? "badge paid" : "badge free"}>
-        {workshop.priceAmount > 0 ? `${workshop.priceAmount.toLocaleString("vi-VN")} ${workshop.currency}` : "Free"}
-      </span>
+      <div className="badge-row">
+        <span className={workshop.priceAmount > 0 ? "badge paid" : "badge free"}>
+          {workshop.priceAmount > 0 ? `${workshop.priceAmount.toLocaleString("vi-VN")} ${workshop.currency}` : "Free"}
+        </span>
+        <AiSummaryStatusBadge status={workshop.aiSummary?.status} />
+      </div>
       <h2>{workshop.title}</h2>
       <p>{workshop.description}</p>
       <div className="meta">

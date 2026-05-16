@@ -71,6 +71,7 @@ export function toWorkshopDto(workshop: WorkshopWithRelations): WorkshopDto {
     })),
     aiSummary: aiSummary
       ? {
+          id: aiSummary.id,
           status: aiSummary.status as AiSummaryStatus,
           summary: aiSummary.status === AiSummaryStatus.DONE ? aiSummary.summary : null,
           updatedAt: aiSummary.updatedAt?.toISOString() ?? null

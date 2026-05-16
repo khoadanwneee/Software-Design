@@ -3,6 +3,7 @@ import type { RedisOptions } from "ioredis";
 import { env } from "./env.js";
 
 let redisWarningLogged = false;
+let redisConnectPromise: Promise<void> | null = null;
 
 export function logRedisUnavailable(context: string, error: unknown) {
   if (redisWarningLogged) {
@@ -36,3 +37,56 @@ export const redis = new IORedis(env.REDIS_URL, {
 });
 
 redis.on("error", (error) => logRedisUnavailable("Redis client", error));
+
+export async function ensureRedisReady() {
+  if (redis.status === "ready") {
+    return;
+  }
+
+  if (!redisConnectPromise) {
+    redisConnectPromise =
+      redis.status === "wait" || redis.status === "close" || redis.status === "end"
+        ? redis.connect().then(() => undefined)
+        : waitForRedisReady();
+    redisConnectPromise = redisConnectPromise.finally(() => {
+      redisConnectPromise = null;
+    });
+  }
+
+  await redisConnectPromise;
+}
+
+function waitForRedisReady() {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Redis connection timed out while status is ${redis.status}`));
+    }, 3_000);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      redis.off("ready", onReady);
+      redis.off("error", onError);
+      redis.off("end", onEnd);
+    };
+
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+
+    const onEnd = () => {
+      cleanup();
+      reject(new Error("Redis connection ended before becoming ready"));
+    };
+
+    redis.once("ready", onReady);
+    redis.once("error", onError);
+    redis.once("end", onEnd);
+  });
+}

@@ -53,9 +53,22 @@ export async function login(input: LoginRequest): Promise<LoginResponse> {
 }
 
 export function verifyToken(token: string): JwtPayload {
-  const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload & { sub?: string };
-  if (!payload.sub) {
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload & { sub?: string };
+    if (!payload.sub) {
+      throw new AppError(401, ErrorCodes.UNAUTHORIZED, "Invalid token");
+    }
+    return { sub: payload.sub, roles: payload.roles ?? [] };
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new AppError(401, ErrorCodes.UNAUTHORIZED, "Token expired");
+    }
+    if (error instanceof jwt.JsonWebTokenError) {
+      throw new AppError(401, ErrorCodes.UNAUTHORIZED, "Invalid token");
+    }
     throw new AppError(401, ErrorCodes.UNAUTHORIZED, "Invalid token");
   }
-  return { sub: payload.sub, roles: payload.roles ?? [] };
 }

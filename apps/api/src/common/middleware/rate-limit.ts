@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { ErrorCodes } from "@unihub/shared-utils";
 import { env } from "../../config/env.js";
-import { redis } from "../../config/redis.js";
+import { ensureRedisReady, redis } from "../../config/redis.js";
 
 interface RateLimitOptions {
   prefix: string;
@@ -17,9 +17,7 @@ export function redisRateLimit(options: RateLimitOptions) {
     const key = `rl:${options.prefix}:${identity}`;
 
     try {
-      if (redis.status === "wait") {
-        await redis.connect();
-      }
+      await ensureRedisReady();
       const count = await redis.incr(key);
       if (count === 1) {
         await redis.expire(key, duration);

@@ -156,6 +156,7 @@ export interface WorkshopDto {
   room: RoomDto;
   speakers: SpeakerDto[];
   aiSummary?: {
+    id: string;
     status: AiSummaryStatus;
     summary: string | null;
     updatedAt: string | null;
@@ -334,6 +335,20 @@ export interface AiSummaryUploadResponse {
   uploadedFileId: string;
   aiSummaryId: string;
   status: AiSummaryStatus.PENDING;
+}
+
+export interface AiSummaryDto {
+  id: string;
+  workshopId: string;
+  uploadedFileId: string;
+  status: AiSummaryStatus;
+  summary: string | null;
+  errorMessage: string | null;
+  model: string | null;
+  attemptCount: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
 }
 
 export interface RegistrationDto {

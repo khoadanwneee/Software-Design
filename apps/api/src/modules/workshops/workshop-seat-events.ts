@@ -2,7 +2,7 @@ import IORedis from "ioredis";
 import { type WorkshopSeatAvailabilityDto, WorkshopStatus } from "@unihub/shared-types";
 import { ErrorCodes } from "@unihub/shared-utils";
 import { prisma } from "../../config/prisma.js";
-import { logRedisUnavailable, redis } from "../../config/redis.js";
+import { ensureRedisReady, logRedisUnavailable, redis } from "../../config/redis.js";
 import { env } from "../../config/env.js";
 import { AppError } from "../../common/errors/app-error.js";
 
@@ -54,9 +54,7 @@ export async function getWorkshopSeatAvailability(input: {
 }): Promise<WorkshopSeatAvailabilityDto> {
   if (!input.bypassCache) {
     try {
-      if (redis.status === "wait") {
-        await redis.connect();
-      }
+      await ensureRedisReady();
       const cached = await redis.get(cacheKey(input.workshopId));
       if (cached) {
         const payload = JSON.parse(cached) as WorkshopSeatAvailabilityDto;
@@ -79,9 +77,7 @@ export async function getWorkshopSeatAvailability(input: {
 export async function publishWorkshopSeatUpdate(workshopId: string): Promise<WorkshopSeatAvailabilityDto | null> {
   try {
     const payload = await getWorkshopSeatAvailability({ workshopId, canSeeDraft: true, bypassCache: true });
-    if (redis.status === "wait") {
-      await redis.connect();
-    }
+    await ensureRedisReady();
     await redis.set(cacheKey(workshopId), JSON.stringify(payload), "EX", seatCacheTtlSeconds);
     await redis.publish(channelName(workshopId), JSON.stringify(payload));
     return payload;

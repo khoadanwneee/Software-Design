@@ -1,5 +1,6 @@
 import type { Job } from "bullmq";
-import { AiSummaryStatus, localObjectStorage, prisma } from "@unihub/db";
+import { localObjectStorage, prisma } from "@unihub/db";
+import { AiSummaryStatus } from "@unihub/shared-types";
 import { cleanPdfText } from "./clean.js";
 import { AiSummaryProcessingError, toAiSummaryError } from "./errors.js";
 import { extractPdfText } from "./extract.js";

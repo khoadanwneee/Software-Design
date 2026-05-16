@@ -1,6 +1,6 @@
 import { ErrorCodes, payloadFingerprint } from "@unihub/shared-utils";
 import { prisma } from "../../config/prisma.js";
-import { redis } from "../../config/redis.js";
+import { ensureRedisReady, redis } from "../../config/redis.js";
 import { AppError } from "../errors/app-error.js";
 
 export async function withIdempotency<T>(input: {
@@ -13,9 +13,7 @@ export async function withIdempotency<T>(input: {
   const cacheKey = `idempotency:${input.scope}:${input.key}`;
 
   try {
-    if (redis.status === "wait") {
-      await redis.connect();
-    }
+    await ensureRedisReady();
     const cached = await redis.get(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached) as { requestHash: string; responseJson: T };

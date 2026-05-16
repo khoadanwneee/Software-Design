@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, XCircle } from "lucide-react";
 import { api } from "../../lib/api";
+import { AiSummaryStatusBadge } from "../ai-summary/AiSummaryRichText";
 
 export function AdminWorkshopsPage() {
   const queryClient = useQueryClient();
@@ -27,6 +28,7 @@ export function AdminWorkshopsPage() {
               <th>Room</th>
               <th>Seats</th>
               <th>Status</th>
+              <th>AI Summary</th>
               <th />
             </tr>
           </thead>
@@ -39,6 +41,9 @@ export function AdminWorkshopsPage() {
                   {workshop.registeredCount}/{workshop.capacity}
                 </td>
                 <td>{workshop.status}</td>
+                <td>
+                  <AiSummaryStatusBadge status={workshop.aiSummary?.status} />
+                </td>
                 <td className="actions">
                   <Link className="icon-button" to={`/admin/workshops/${workshop.id}/edit`} title="Edit">
                     <Pencil size={16} />
