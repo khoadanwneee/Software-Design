@@ -4,8 +4,7 @@ const VNP_TMNCODE = "QE65RLIF";
 const VNP_HASHSECRET = "C8M1OZFHKV7WXLGL1MB8IS4R9VWRI2OE";
 
 // ⚠️ FIX: phải là endpoint full
-const VNP_URL = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
-
+const VNP_URL = process.env.VNP_URL?.trim() ?? "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
 const VNP_RETURN_URL = process.env.VNP_RETURN_URL?.trim() ?? "";
 
 function formatVnpDate(date = new Date()) {
@@ -62,6 +61,7 @@ export const paymentProvider = {
     currency: string;
     idempotencyKey: string;
   }) {
+    //throw new Error("VNPay down");
     const orderId = `${input.registrationId}-${Date.now()}`;
 
     const params: Record<string, string | number> = {

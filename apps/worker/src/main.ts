@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { Worker } from "bullmq";
 import { prisma } from "@unihub/db";
-import { redisConnection } from "./queues.js";
+import { paymentQueue, redisConnection } from "./queues.js";
 import { processNotification } from "./processors/notification.processor.js";
 import { processPayment } from "./processors/payment.processor.js";
 import { processAiSummary } from "./processors/ai-summary.processor.js";
@@ -31,3 +31,18 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 console.log("UniHub worker started.");
+
+async function schedulePaymentReconcile() {
+  await paymentQueue.add(
+    "payment.reconcile",
+    {},
+    {
+      jobId: "payment.reconcile",
+      repeat: { every: 60_000 }
+    }
+  );
+}
+
+schedulePaymentReconcile().catch((error) =>
+  console.error("[worker:payments] failed to schedule payment.reconcile", error)
+);

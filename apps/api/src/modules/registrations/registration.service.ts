@@ -5,7 +5,7 @@ import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../common/errors/app-error.js";
 import { createQrTokenForRegistration } from "../../common/utils/qr-token.js";
 import { withIdempotency } from "../../common/utils/idempotency.js";
-import { publishNotificationJob } from "../notifications/queue.js";
+import { publishNotificationJob } from "../notifications/publish-notification-job.js";
 import { createOrRefreshPaymentAttempt, createPaymentAttempt } from "../payments/payment.service.js";
 import { publishWorkshopSeatUpdate } from "../workshops/workshop-seat-events.js";
 
@@ -37,6 +37,20 @@ async function dtoForRegistration(registrationId: string): Promise<RegistrationD
   };
 }
 
+function assertRegistrationDeadline(workshop: any) {
+  const deadline = new Date(workshop.startTime);
+  deadline.setDate(deadline.getDate() - 1);
+  deadline.setHours(23, 59, 59, 999);
+
+  if (new Date() > deadline) {
+    throw new AppError(
+      409,
+      ErrorCodes.VALIDATION_ERROR,
+      "Registration closed"
+    );
+  }
+}
+
 async function reserveSeat(tx: Prisma.TransactionClient, workshopId: string) {
   const affectedRows = await tx.$executeRaw`
     UPDATE "workshops"
@@ -44,7 +58,6 @@ async function reserveSeat(tx: Prisma.TransactionClient, workshopId: string) {
         "updated_at" = NOW()
     WHERE "id" = ${workshopId}
       AND "status" = 'PUBLISHED'
-      AND "end_time" > NOW()
       AND "registered_count" < "capacity"
   `;
 
@@ -74,6 +87,7 @@ export async function createFreeRegistration(input: {
 
       const result = await prisma.$transaction(async (tx) => {
         const workshop = await tx.workshop.findUnique({ where: { id: input.workshopId } });
+        assertRegistrationDeadline(workshop);
         if (!workshop || workshop.status !== "PUBLISHED") {
           throw new AppError(404, ErrorCodes.NOT_FOUND, "Workshop not found");
         }
@@ -169,6 +183,7 @@ export async function createPaidRegistration(input: {
 
       const registration = await prisma.$transaction(async (tx) => {
         const workshop = await tx.workshop.findUnique({ where: { id: input.workshopId } });
+        assertRegistrationDeadline(workshop);
         if (!workshop || workshop.status !== "PUBLISHED") {
           throw new AppError(404, ErrorCodes.NOT_FOUND, "Workshop not found");
         }
@@ -230,5 +245,26 @@ export async function getRegistrationQr(input: { registrationId: string; request
       registrationId: registration.id,
       workshopId: registration.workshopId
     })
+  };
+}
+
+export async function getMyRegistrationByWorkshop(input: { userId: string; workshopId: string }) {
+  const registration = await prisma.registration.findUnique({
+    where: {
+      userId_workshopId: {
+        userId: input.userId,
+        workshopId: input.workshopId
+      }
+    }
+  });
+
+  if (!registration) {
+    return null;
+  }
+
+  return {
+    id: registration.id,
+    workshopId: registration.workshopId,
+    status: registration.status
   };
 }

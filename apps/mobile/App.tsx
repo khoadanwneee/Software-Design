@@ -6,40 +6,24 @@ import { parseQrPayload } from "@unihub/shared-utils";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  NativeModules,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View
-} from "react-native";
+import { ActivityIndicator, Alert, NativeModules, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 const ACCESS_TOKEN_KEY = "unihub.mobile.accessToken";
 const USER_KEY = "unihub.mobile.user";
 const DEVICE_ID_KEY = "unihub.mobile.deviceId";
 const OFFLINE_QUEUE_KEY = "unihub.mobile.offlineQueue";
-
 type Session = { accessToken: string; user: AuthUser };
-type CheckinMode = "ONLINE" | "OFFLINE";
+type TabKey = "SCAN" | "HISTORY";
 
 function resolveApiBaseUrl() {
   const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
   if (envBaseUrl) return envBaseUrl;
-
-  const fallbackHost = "192.168.1.2";
-
+  const fallbackHost = "192.168.1.7";
   const scriptUrl = NativeModules.SourceCode?.scriptURL as string | undefined;
   if (scriptUrl) {
     try {
       const host = new URL(scriptUrl).hostname;
-      if (host && host !== "localhost" && host !== "127.0.0.1") {
-        return `http://${host}:4000/api`;
-      }
+      if (host && host !== "localhost" && host !== "127.0.0.1") return `http://${host}:4000/api`;
       return `http://${fallbackHost}:4000/api`;
     } catch {
       return `http://${fallbackHost}:4000/api`;
@@ -50,6 +34,36 @@ function resolveApiBaseUrl() {
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function prettyTime(ts: string) {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return ts;
+  return date.toLocaleString();
+}
+
+function statusText(status: OfflineSyncStatus) {
+  if (status === OfflineSyncStatus.PENDING) return "Đã lưu offline";
+  if (status === OfflineSyncStatus.SYNCED) return "Check-in thành công";
+  if (status === OfflineSyncStatus.DUPLICATE) return "Đã check-in";
+  if (status === OfflineSyncStatus.CONFLICT) return "Xung đột";
+  return "Thất bại";
+}
+
+function fallbackStatusMessage(status: OfflineSyncStatus) {
+  if (status === OfflineSyncStatus.PENDING) return "Đã lưu check-in offline.";
+  if (status === OfflineSyncStatus.SYNCED) return "Check-in thành công.";
+  if (status === OfflineSyncStatus.DUPLICATE) return "Đã check-in trước đó.";
+  if (status === OfflineSyncStatus.CONFLICT) return "Xung đột khi đồng bộ.";
+  return "Check-in thất bại.";
+}
+
+function statusColor(status: OfflineSyncStatus) {
+  if (status === OfflineSyncStatus.SYNCED) return "#1f8f4f";
+  if (status === OfflineSyncStatus.PENDING) return "#b56b00";
+  if (status === OfflineSyncStatus.DUPLICATE) return "#2457c5";
+  if (status === OfflineSyncStatus.CONFLICT) return "#ad2727";
+  return "#7a1f1f";
 }
 
 async function getOrCreateDeviceId() {
@@ -81,21 +95,14 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [workshopId, setWorkshopId] = useState("");
-  const [qrPayload, setQrPayload] = useState("");
-  const [manualQr, setManualQr] = useState("");
   const [scannerEnabled, setScannerEnabled] = useState(true);
   const [lastResult, setLastResult] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
+  const [queueRecords, setQueueRecords] = useState<OfflineCheckinRecord[]>([]);
+  const [activeTab, setActiveTab] = useState<TabKey>("SCAN");
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const lastScanAtRef = useRef(0);
-
-  function resetScanState() {
-    setQrPayload("");
-    setManualQr("");
-    setScannerEnabled(true);
-  }
 
   const api = useMemo(
     () =>
@@ -106,20 +113,21 @@ export default function App() {
     [apiBaseUrl, session]
   );
 
+  async function refreshQueueState() {
+    const queue = await loadOfflineQueue();
+    const sorted = [...queue].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    setQueueRecords(sorted.slice(0, 20));
+    setPendingCount(queue.filter((q) => q.syncStatus === OfflineSyncStatus.PENDING).length);
+  }
+
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [token, userRaw, queue] = await Promise.all([
-          AsyncStorage.getItem(ACCESS_TOKEN_KEY),
-          AsyncStorage.getItem(USER_KEY),
-          loadOfflineQueue()
-        ]);
+        const [token, userRaw] = await Promise.all([AsyncStorage.getItem(ACCESS_TOKEN_KEY), AsyncStorage.getItem(USER_KEY)]);
         if (!mounted) return;
-        if (token && userRaw) {
-          setSession({ accessToken: token, user: JSON.parse(userRaw) as AuthUser });
-        }
-        setPendingCount(queue.filter((q) => q.syncStatus === OfflineSyncStatus.PENDING).length);
+        if (token && userRaw) setSession({ accessToken: token, user: JSON.parse(userRaw) as AuthUser });
+        await refreshQueueState();
       } finally {
         if (mounted) setLoadingSession(false);
       }
@@ -128,6 +136,7 @@ export default function App() {
     const unsubscribe = NetInfo.addEventListener((state) => {
       setIsOnline(Boolean(state.isConnected && state.isInternetReachable !== false));
     });
+
     return () => {
       mounted = false;
       unsubscribe();
@@ -140,18 +149,15 @@ export default function App() {
 
   async function handleLogin() {
     if (!email || !password) {
-      Alert.alert("Thieu thong tin", "Vui long nhap email va mat khau.");
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập email và mật khẩu.");
       return;
     }
     setBusy(true);
     try {
       const res = await api.authApi.login({ email: email.trim(), password });
-      const okRole =
-        res.user.roles.includes(Role.CHECKIN_STAFF) ||
-        res.user.roles.includes(Role.ORGANIZER) ||
-        res.user.roles.includes(Role.ADMIN);
+      const okRole = res.user.roles.includes(Role.CHECKIN_STAFF) || res.user.roles.includes(Role.ADMIN);
       if (!okRole) {
-        Alert.alert("Khong du quyen", "Tai khoan khong co quyen check-in.");
+        Alert.alert("Không đủ quyền", "Mobile check-in chỉ dành cho staff hoặc admin.");
         return;
       }
       const next = { accessToken: res.accessToken, user: res.user };
@@ -160,12 +166,10 @@ export default function App() {
         [USER_KEY, JSON.stringify(next.user)]
       ]);
       setSession(next);
-      setLastResult("Dang nhap thanh cong.");
-      if (!cameraPermission?.granted) {
-        await requestCameraPermission();
-      }
+      setLastResult("Đăng nhập thành công.");
+      if (!cameraPermission?.granted) await requestCameraPermission();
     } catch (error) {
-      Alert.alert("Loi", error instanceof Error ? error.message : "Dang nhap that bai");
+      Alert.alert("Lỗi", error instanceof Error ? error.message : "Đăng nhập thất bại");
     } finally {
       setBusy(false);
     }
@@ -174,7 +178,7 @@ export default function App() {
   async function handleLogout() {
     await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, USER_KEY]);
     setSession(null);
-    setLastResult("Da dang xuat.");
+    setLastResult("Đã đăng xuất.");
   }
 
   async function syncOfflineQueue() {
@@ -182,9 +186,10 @@ export default function App() {
     const queue = await loadOfflineQueue();
     const pending = queue.filter((q) => q.syncStatus === OfflineSyncStatus.PENDING);
     if (pending.length === 0) {
-      setPendingCount(0);
+      await refreshQueueState();
       return;
     }
+
     try {
       const res = await api.checkinApi.syncOffline({ events: pending });
       const byId = new Map(res.results.map((r) => [r.clientCheckinId, r]));
@@ -199,8 +204,16 @@ export default function App() {
         };
       });
       await saveOfflineQueue(updated);
-      setPendingCount(updated.filter((q) => q.syncStatus === OfflineSyncStatus.PENDING).length);
-      setLastResult("Dong bo offline xong.");
+      await refreshQueueState();
+      setLastResult("Đồng bộ offline xong.");
+      if (res.results.length > 0) {
+        const lines = res.results.map((result) => {
+          const label = statusText(result.status);
+          const message = result.message ?? result.errorCode ?? fallbackStatusMessage(result.status);
+          return `${label}: ${message}`;
+        });
+        Alert.alert("Kết quả đồng bộ", lines.join("\n"));
+      }
     } catch (error) {
       const updated = queue.map((q) =>
         q.syncStatus === OfflineSyncStatus.PENDING
@@ -214,19 +227,20 @@ export default function App() {
           : q
       );
       await saveOfflineQueue(updated);
-      setPendingCount(updated.filter((q) => q.syncStatus === OfflineSyncStatus.PENDING).length);
-      setLastResult("Sync loi, se thu lai khi co mang.");
+      await refreshQueueState();
+      setLastResult("Sync lỗi, sẽ thử lại khi có mạng.");
+      Alert.alert("Đồng bộ thất bại", error instanceof Error ? error.message : "Sync failed");
     }
   }
 
-  async function saveLocalOfflineCheckin(payload: string, targetWorkshopId: string) {
+  async function saveLocalOfflineCheckin(payload: string, workshopId: string) {
     if (!session) return;
     const now = new Date().toISOString();
     const deviceId = await getOrCreateDeviceId();
     const record: OfflineCheckinRecord = {
       clientCheckinId: createId(),
       qrPayload: payload,
-      workshopId: targetWorkshopId,
+      workshopId,
       staffId: session.user.id,
       deviceId,
       checkedInAt: now,
@@ -236,65 +250,57 @@ export default function App() {
       createdAt: now,
       updatedAt: now
     };
+
     const queue = await loadOfflineQueue();
     queue.push(record);
     await saveOfflineQueue(queue);
-    setPendingCount(queue.filter((q) => q.syncStatus === OfflineSyncStatus.PENDING).length);
-    setLastResult("Da luu check-in offline.");
+    await refreshQueueState();
+    setLastResult("Đã lưu check-in offline.");
+    Alert.alert(statusText(OfflineSyncStatus.PENDING), fallbackStatusMessage(OfflineSyncStatus.PENDING));
   }
 
   async function runCheckin(payload: string) {
-    if (!session) return;
+    if (!session) return false;
     const trimmedPayload = payload.trim();
-    if (!trimmedPayload) {
-      Alert.alert("Thieu du lieu", "Can QR payload.");
+    if (!trimmedPayload) return false;
+
+    let workshopId = "";
+    try {
+      const parsed = parseQrPayload(trimmedPayload);
+      workshopId = parsed.workshopId ?? "";
+    } catch {
+      Alert.alert("QR lỗi", "QR payload không hợp lệ.");
       return false;
     }
 
-    let targetWorkshopId = workshopId.trim();
-    try {
-      const parsed = parseQrPayload(trimmedPayload);
-      if (!targetWorkshopId && parsed.workshopId) {
-        targetWorkshopId = parsed.workshopId;
-      } else if (parsed.workshopId && parsed.workshopId !== targetWorkshopId) {
-        Alert.alert("Sai workshop", "QR thuoc workshop khac. Hay chon dung workshop.");
-        return false;
-      }
-    } catch {
-      // Ignore parse errors; API will validate raw payload.
-    }
-
-    if (!targetWorkshopId) {
-      Alert.alert("Thieu du lieu", "Can workshop id.");
+    if (!workshopId) {
+      Alert.alert("Thiếu workshop", "QR không có workshop_id nên không thể check-in.");
       return false;
     }
 
     setBusy(true);
-    const mode: CheckinMode = isOnline ? "ONLINE" : "OFFLINE";
     try {
-      if (mode === "ONLINE") {
+      if (isOnline) {
         const result = await api.checkinApi.checkin({
           qrPayload: trimmedPayload,
-          workshopId: targetWorkshopId,
+          workshopId,
           idempotencyKey: createId()
         });
-        const message = `Check-in ${result.status}`;
-        setLastResult(message);
-        Alert.alert("Thanh cong", message);
+        const status = result.status as OfflineSyncStatus;
+        setLastResult(`Check-in ${status}`);
+        Alert.alert(statusText(status), fallbackStatusMessage(status));
       } else {
-        await saveLocalOfflineCheckin(trimmedPayload, targetWorkshopId);
-        setLastResult("Da luu check-in offline.");
-        Alert.alert("Da luu offline", "Se tu dong dong bo khi co mang.");
+        await saveLocalOfflineCheckin(trimmedPayload, workshopId);
       }
       return true;
     } catch (error) {
       if (error instanceof ApiClientError) {
         setLastResult(error.message);
-        Alert.alert("Check-in that bai", error.message);
+          Alert.alert("Check-in thất bại", error.message);
         return false;
       }
-      await saveLocalOfflineCheckin(trimmedPayload, targetWorkshopId);
-      setLastResult("Online loi, da fallback offline.");
+      await saveLocalOfflineCheckin(trimmedPayload, workshopId);
+      setLastResult("Online lỗi, đã fallback offline.");
       return true;
     } finally {
       setBusy(false);
@@ -304,42 +310,20 @@ export default function App() {
   async function onQrDetected(payload: string) {
     if (!scannerEnabled || busy) return;
     const now = Date.now();
-    if (now - lastScanAtRef.current < 2000) {
-      return;
-    }
+    if (now - lastScanAtRef.current < 1200) return;
+
     lastScanAtRef.current = now;
     setScannerEnabled(false);
-    const trimmed = payload.trim();
-    if (!trimmed) {
-      setScannerEnabled(true);
-      return;
-    }
-    try {
-      const parsed = parseQrPayload(trimmed);
-      if (parsed.workshopId && !workshopId.trim()) {
-        setWorkshopId(parsed.workshopId);
-      } else if (parsed.workshopId && parsed.workshopId !== workshopId.trim()) {
-        Alert.alert("Sai workshop", "QR thuoc workshop khac. Hay chon dung workshop.");
-        setScannerEnabled(true);
-        return;
-      }
-    } catch {
-      // Ignore parse errors; API will validate raw payload.
-    }
-    setQrPayload(trimmed);
-    const ok = await runCheckin(trimmed);
-    if (ok) {
-      resetScanState();
-    } else {
-      setScannerEnabled(true);
-    }
+    const ok = await runCheckin(payload);
+    setScannerEnabled(true);
+    if (!ok) return;
   }
 
   if (loadingSession) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.note}>Dang tai...</Text>
+        <ActivityIndicator size="large" color="#0d5642" />
+        <Text style={styles.note}>Đang tải...</Text>
       </SafeAreaView>
     );
   }
@@ -348,92 +332,74 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>UniHub Mobile Check-in</Text>
-        <Text style={styles.subtitle}>{isOnline ? "Online" : "Offline"} | Pending: {pendingCount}</Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>UniHub Gate Check-in</Text>
+          {session ? <Text style={styles.subtitle}>{isOnline ? "Online" : "Offline"} | Pending: {pendingCount}</Text> : null}
+        </View>
 
         {!session ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Dang nhap</Text>
-            <TextInput
-              style={styles.input}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
-            />
-            <TextInput
-              style={styles.input}
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Mat khau"
-            />
-            <Pressable style={styles.button} disabled={busy} onPress={handleLogin}>
-              <Text style={styles.buttonText}>{busy ? "Dang dang nhap..." : "Dang nhap"}</Text>
+            <Text style={styles.cardTitle}>Đăng nhập</Text>
+            <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="Email" />
+            <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder="Mật khẩu" />
+            <Pressable style={styles.buttonPrimary} disabled={busy} onPress={handleLogin}>
+              <Text style={styles.buttonPrimaryText}>{busy ? "Đang đăng nhập..." : "Đăng nhập"}</Text>
             </Pressable>
-            <Text style={styles.note}>API: {apiBaseUrl}</Text>
           </View>
         ) : (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Scan QR Check-in</Text>
-            <Text style={styles.note}>Xin chao {session.user.fullName}</Text>
-            <TextInput
-              style={styles.input}
-              value={workshopId}
-              onChangeText={setWorkshopId}
-              placeholder="Workshop ID"
-            />
-
-            {!cameraPermission?.granted ? (
-              <Pressable style={styles.button} onPress={() => requestCameraPermission()}>
-                <Text style={styles.buttonText}>Cap quyen camera</Text>
+          <>
+            <View style={styles.tabRow}>
+              <Pressable style={[styles.tabBtn, activeTab === "SCAN" && styles.tabBtnActive]} onPress={() => setActiveTab("SCAN")}>
+                <Text style={[styles.tabText, activeTab === "SCAN" && styles.tabTextActive]}>Check-in</Text>
               </Pressable>
+              <Pressable style={[styles.tabBtn, activeTab === "HISTORY" && styles.tabBtnActive]} onPress={() => setActiveTab("HISTORY")}>
+                <Text style={[styles.tabText, activeTab === "HISTORY" && styles.tabTextActive]}>Lịch sử offline</Text>
+              </Pressable>
+            </View>
+
+            {activeTab === "SCAN" ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Quét QR</Text>
+                {!cameraPermission?.granted ? (
+                  <Pressable style={styles.buttonPrimary} onPress={() => requestCameraPermission()}>
+                    <Text style={styles.buttonPrimaryText}>Cấp quyền camera</Text>
+                  </Pressable>
+                ) : (
+                  <View style={styles.scannerWrap}>
+                    <CameraView
+                      style={styles.scanner}
+                      facing="back"
+                      barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                      onBarcodeScanned={(event) => void onQrDetected(event.data)}
+                    />
+                  </View>
+                )}
+                <View style={styles.rowButtons}>
+                  <Pressable style={styles.buttonSecondaryCompact} disabled={busy || !isOnline} onPress={() => void syncOfflineQueue()}>
+                    <Text style={styles.buttonSecondaryText}>Đồng bộ</Text>
+                  </Pressable>
+                  <Pressable style={styles.buttonSecondaryCompact} disabled={busy} onPress={handleLogout}>
+                    <Text style={styles.buttonSecondaryText}>Đăng xuất</Text>
+                  </Pressable>
+                </View>
+              </View>
             ) : (
-              <View style={styles.scannerWrap}>
-                <CameraView
-                  style={styles.scanner}
-                  facing="back"
-                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                  onBarcodeScanned={(event) => void onQrDetected(event.data)}
-                />
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Lịch sử lưu offline</Text>
+                {queueRecords.length === 0 ? (
+                  <Text style={styles.note}>Chưa có bản ghi local.</Text>
+                ) : (
+                  queueRecords.map((item) => (
+                    <View key={item.clientCheckinId} style={styles.queueItem}>
+                      <Text style={styles.queueMeta}>Workshop: {item.workshopId}</Text>
+                      <Text style={styles.queueMeta}>Thời gian: {prettyTime(item.createdAt)}</Text>
+                      <Text style={[styles.badge, { backgroundColor: statusColor(item.syncStatus) }]}>{statusText(item.syncStatus)}</Text>
+                    </View>
+                  ))
+                )}
               </View>
             )}
-
-            <Text style={styles.note}>QR vua scan: {qrPayload || "(chua co)"}</Text>
-            <Pressable style={styles.secondaryButton} onPress={resetScanState}>
-              <Text style={styles.secondaryButtonText}>Scan tiep</Text>
-            </Pressable>
-
-            <TextInput
-              style={[styles.input, styles.multiline]}
-              multiline
-              numberOfLines={3}
-              value={manualQr}
-              onChangeText={setManualQr}
-              placeholder="Nhap tay QR payload (du phong)"
-            />
-            <Pressable
-              style={styles.button}
-              disabled={busy}
-              onPress={() =>
-                void runCheckin(manualQr).then((ok) => {
-                  if (ok) {
-                    resetScanState();
-                  }
-                })
-              }
-            >
-              <Text style={styles.buttonText}>{busy ? "Dang xu ly..." : "Check-in bang nhap tay"}</Text>
-            </Pressable>
-
-            <Pressable style={styles.secondaryButton} disabled={busy || !isOnline} onPress={() => void syncOfflineQueue()}>
-              <Text style={styles.secondaryButtonText}>Dong bo thu cong</Text>
-            </Pressable>
-            <Pressable style={styles.secondaryButton} disabled={busy} onPress={handleLogout}>
-              <Text style={styles.secondaryButtonText}>Dang xuat</Text>
-            </Pressable>
-          </View>
+          </>
         )}
 
         {lastResult ? <Text style={styles.note}>{lastResult}</Text> : null}
@@ -443,38 +409,29 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f2f4f8" },
-  content: { padding: 20, gap: 16 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
-  title: { fontSize: 28, fontWeight: "700", color: "#0b2a4a" },
-  subtitle: { fontSize: 14, color: "#36587b" },
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, gap: 12 },
-  cardTitle: { fontSize: 20, fontWeight: "600", color: "#102030" },
-  input: {
-    borderWidth: 1,
-    borderColor: "#c7d2df",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "#fff"
-  },
-  multiline: { minHeight: 90, textAlignVertical: "top" },
-  scannerWrap: {
-    borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#9db0c5"
-  },
-  scanner: { width: "100%", height: 260 },
-  button: { backgroundColor: "#0b2a4a", borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-  buttonText: { color: "#fff", fontWeight: "700" },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: "#9db0c5",
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: "center"
-  },
-  secondaryButtonText: { color: "#23405f", fontWeight: "600" },
-  note: { color: "#455a70" }
+  container: { flex: 1, backgroundColor: "#f6f7f2" },
+  content: { padding: 16, gap: 14, paddingBottom: 28 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 10, backgroundColor: "#f6f7f2" },
+  header: { padding: 14, borderRadius: 14, backgroundColor: "#e9f5ef", borderWidth: 1, borderColor: "#cfe7dd" },
+  title: { fontSize: 26, fontWeight: "800", color: "#153f30" },
+  subtitle: { marginTop: 4, fontSize: 13, color: "#2e6b55" },
+  tabRow: { flexDirection: "row", gap: 8 },
+  tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "#aac2b6", alignItems: "center", backgroundColor: "#fff" },
+  tabBtnActive: { backgroundColor: "#0f5d45", borderColor: "#0f5d45" },
+  tabText: { color: "#244e3d", fontWeight: "700" },
+  tabTextActive: { color: "#fff" },
+  card: { backgroundColor: "#fff", borderRadius: 14, padding: 14, gap: 10, borderWidth: 1, borderColor: "#e3e5e9" },
+  cardTitle: { fontSize: 19, fontWeight: "700", color: "#122a20" },
+  input: { borderWidth: 1, borderColor: "#c8d6cc", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: "#fcfefc" },
+  scannerWrap: { borderRadius: 12, overflow: "hidden", borderWidth: 1, borderColor: "#b7c9bd" },
+  scanner: { width: "100%", height: 320 },
+  buttonPrimary: { backgroundColor: "#0f5d45", borderRadius: 10, paddingVertical: 12, alignItems: "center" },
+  buttonPrimaryText: { color: "#fff", fontWeight: "700" },
+  buttonSecondaryCompact: { flex: 1, borderWidth: 1, borderColor: "#9eb3a8", borderRadius: 10, paddingVertical: 10, alignItems: "center" },
+  buttonSecondaryText: { color: "#244e3d", fontWeight: "700", fontSize: 12 },
+  rowButtons: { flexDirection: "row", gap: 8 },
+  queueItem: { borderWidth: 1, borderColor: "#d9dfda", borderRadius: 10, padding: 10, backgroundColor: "#f9fbf9", gap: 6 },
+  queueMeta: { fontSize: 12, color: "#3f5148" },
+  badge: { color: "#fff", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, fontSize: 12, fontWeight: "700", alignSelf: "flex-start" },
+  note: { color: "#4b5e54", fontSize: 13 }
 });

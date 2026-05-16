@@ -163,21 +163,21 @@ export async function syncOfflineCheckins(events: OfflineCheckinRecord[]): Promi
 }
 
 async function syncSingleEvent(event: OfflineCheckinRecord): Promise<OfflineCheckinSyncResult> {
-  const existingLog = await prisma.offlineCheckinSyncLog.findUnique({
-    where: { deviceId_clientCheckinId: { deviceId: event.deviceId, clientCheckinId: event.clientCheckinId } }
-  });
-
-  if (existingLog) {
-    return {
-      clientCheckinId: event.clientCheckinId,
-      status: existingLog.syncStatus as OfflineSyncStatus,
-      checkinId: existingLog.checkinId ?? undefined,
-      errorCode: existingLog.errorCode ?? undefined,
-      message: existingLog.errorMessage ?? "Duplicate sync request returned previous result"
-    };
-  }
-
   try {
+    const existingLog = await prisma.offlineCheckinSyncLog.findUnique({
+      where: { deviceId_clientCheckinId: { deviceId: event.deviceId, clientCheckinId: event.clientCheckinId } }
+    });
+
+    if (existingLog) {
+      return {
+        clientCheckinId: event.clientCheckinId,
+        status: existingLog.syncStatus as OfflineSyncStatus,
+        checkinId: existingLog.checkinId ?? undefined,
+        errorCode: existingLog.errorCode ?? undefined,
+        message: existingLog.errorMessage ?? "Duplicate sync request returned previous result"
+      };
+    }
+
     const parsed = parseQrPayload(event.qrPayload);
     const tokenHash = sha256(parsed.token);
     const qrPayloadHash = payloadFingerprint(event.qrPayload);
@@ -244,25 +244,31 @@ async function syncSingleEvent(event: OfflineCheckinRecord): Promise<OfflineChec
 
     return result;
   } catch (error) {
-    await prisma.offlineCheckinSyncLog.create({
-      data: {
-        clientCheckinId: event.clientCheckinId,
-        deviceId: event.deviceId,
-        workshopId: event.workshopId,
-        staffId: event.staffId,
-        qrPayloadHash: payloadFingerprint(event.qrPayload),
-        syncStatus: OfflineSyncStatus.FAILED,
-        errorCode: "SYNC_FAILED",
-        errorMessage: error instanceof Error ? error.message : "Unknown sync failure",
-        syncedAt: new Date()
-      }
-    });
+    const errorMessage = error instanceof Error ? error.message : "Unknown sync failure";
+
+    try {
+      await prisma.offlineCheckinSyncLog.create({
+        data: {
+          clientCheckinId: event.clientCheckinId,
+          deviceId: event.deviceId,
+          workshopId: event.workshopId,
+          staffId: event.staffId,
+          qrPayloadHash: payloadFingerprint(event.qrPayload ?? ""),
+          syncStatus: OfflineSyncStatus.FAILED,
+          errorCode: "SYNC_FAILED",
+          errorMessage,
+          syncedAt: new Date()
+        }
+      });
+    } catch {
+      // Best-effort logging; do not surface logging failures to clients.
+    }
 
     return {
       clientCheckinId: event.clientCheckinId,
       status: OfflineSyncStatus.FAILED,
       errorCode: "SYNC_FAILED",
-      message: error instanceof Error ? error.message : "Unknown sync failure"
+      message: errorMessage
     };
   }
 }

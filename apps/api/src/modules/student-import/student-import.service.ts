@@ -3,7 +3,7 @@ import { buildStorageKey, localObjectStorage, prisma } from "@unihub/db";
 import { ErrorCodes } from "@unihub/shared-utils";
 import { AppError } from "../../common/errors/app-error.js";
 import { sha256, sha256Buffer } from "../../common/utils/crypto.js";
-import { studentImportQueue } from "../notifications/queue.js";
+import { studentImportQueue } from "../../common/queues.js";
 
 const csvContentTypes = new Set(["text/csv", "application/csv", "application/vnd.ms-excel", "text/plain", ""]);
 
