@@ -5,13 +5,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Save } from "lucide-react";
 import { z } from "zod";
-import { WorkshopStatus } from "@unihub/shared-types";
+import { WorkshopCategory, WorkshopStatus } from "@unihub/shared-types";
 import { api } from "../../lib/api";
 
 const schema = z.object({
   title: z.string().min(3),
   description: z.string().min(10),
-  category: z.string().min(2),
+  category: z.nativeEnum(WorkshopCategory),
   roomId: z.string().min(1),
   startTime: z.string().min(1),
   endTime: z.string().min(1),
@@ -32,7 +32,7 @@ export function AdminWorkshopFormPage() {
     defaultValues: {
       title: "",
       description: "",
-      category: "Career",
+      category: WorkshopCategory.Career,
       roomId: "",
       startTime: "2026-05-15T09:00",
       endTime: "2026-05-15T11:00",
@@ -41,6 +41,8 @@ export function AdminWorkshopFormPage() {
       status: WorkshopStatus.PUBLISHED
     }
   });
+
+  const categoryOptions = Object.values(WorkshopCategory);
 
   useEffect(() => {
     if (detail.data) {
@@ -80,7 +82,13 @@ export function AdminWorkshopFormPage() {
         </label>
         <label>
           Category
-          <input {...form.register("category")} />
+          <select {...form.register("category")}>
+            {categoryOptions.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="full">
           Description

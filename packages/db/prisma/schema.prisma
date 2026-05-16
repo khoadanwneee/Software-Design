@@ -27,6 +27,19 @@ enum WorkshopStatus {
   COMPLETED
 }
 
+enum WorkshopCategory {
+  AI
+  Career
+  Data
+  Design
+  Product
+  Cloud
+  Security
+  DevOps
+  Mobile
+  Web
+}
+
 enum RegistrationStatus {
   PENDING_PAYMENT
   CONFIRMED
@@ -164,7 +177,7 @@ model Workshop {
   slug            String             @unique
   title           String
   description     String
-  category        String
+  category        WorkshopCategory
   roomId          String             @map("room_id")
   createdById     String             @map("created_by_id")
   startTime       DateTime           @map("start_time")

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WorkshopStatus } from "@unihub/shared-types";
+import { WorkshopCategory, WorkshopStatus } from "@unihub/shared-types";
 
 const optionalNonEmptyString = z
   .string()
@@ -19,10 +19,15 @@ const booleanQuery = z
   .transform((value) => value === "true")
   .optional();
 
+const optionalCategory = z
+  .nativeEnum(WorkshopCategory)
+  .optional()
+  .or(z.literal("").transform(() => undefined));
+
 const workshopBodySchema = z.object({
   title: z.string().min(3),
   description: z.string().min(10),
-  category: z.string().min(2),
+  category: z.nativeEnum(WorkshopCategory),
   roomId: z.string().min(1),
   startTime: z.string().datetime(),
   endTime: z.string().datetime(),
@@ -52,7 +57,7 @@ export const updateWorkshopSchema = workshopBodySchema.partial().refine(
 export const workshopListQuerySchema = z
   .object({
     keyword: optionalNonEmptyString,
-    category: optionalNonEmptyString,
+    category: optionalCategory,
     roomId: optionalNonEmptyString,
     date: dateOnly,
     fromDate: dateOnly,

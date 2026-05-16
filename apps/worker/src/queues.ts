@@ -37,3 +37,8 @@ export const checkinSyncQueue = new Queue("checkin-sync", {
   connection: redisConnection,
   defaultJobOptions: { attempts: 3, backoff: { type: "exponential", delay: 3000 } }
 });
+
+export const workshopQueue = new Queue("workshops", {
+  connection: redisConnection,
+  defaultJobOptions: { attempts: 3, backoff: { type: "exponential", delay: 5000 } }
+});

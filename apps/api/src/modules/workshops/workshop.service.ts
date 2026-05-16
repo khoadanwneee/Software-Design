@@ -1,11 +1,18 @@
-import { AiSummaryStatus, type WorkshopDto, type WorkshopListFilters } from "@unihub/shared-types";
+import { AiSummaryStatus, WorkshopCategory, type WorkshopDto, type WorkshopListFilters } from "@unihub/shared-types";
 import { ErrorCodes } from "@unihub/shared-utils";
-import { buildStorageKey, localObjectStorage, Prisma, WorkshopStatus as PrismaWorkshopStatus } from "@unihub/db";
+import {
+  buildStorageKey,
+  localObjectStorage,
+  Prisma,
+  WorkshopCategory as PrismaWorkshopCategory,
+  WorkshopStatus as PrismaWorkshopStatus
+} from "@unihub/db";
 import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../common/errors/app-error.js";
 import { sha256Buffer } from "../../common/utils/crypto.js";
-import { aiSummaryQueue, publishNotificationJob } from "../notifications/queue.js";
+import { aiSummaryQueue } from "../../common/queues.js";
+import { publishNotificationJob } from "../notifications/publish-notification-job.js";
 import { publishWorkshopSeatUpdate } from "./workshop-seat-events.js";
 
 const workshopInclude = {
@@ -19,7 +26,7 @@ type WorkshopWithRelations = Prisma.WorkshopGetPayload<{ include: typeof worksho
 interface WorkshopInput {
   title: string;
   description: string;
-  category: string;
+  category: WorkshopCategory;
   roomId: string;
   startTime: Date;
   endTime: Date;
@@ -304,7 +311,7 @@ export async function createWorkshop(actorId: string, input: WorkshopInput) {
       slug: slugify(input.title),
       title: input.title,
       description: input.description,
-      category: input.category,
+      category: input.category as PrismaWorkshopCategory,
       startTime,
       endTime,
       capacity: input.capacity,
@@ -365,7 +372,7 @@ export async function updateWorkshop(actorId: string, id: string, input: Record<
     data: {
       title: input.title as string | undefined,
       description: input.description as string | undefined,
-      category: input.category as string | undefined,
+      category: input.category as PrismaWorkshopCategory | undefined,
       roomId: input.roomId as string | undefined,
       startTime: input.startTime ? nextStart : undefined,
       endTime: input.endTime ? nextEnd : undefined,

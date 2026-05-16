@@ -24,6 +24,19 @@ export enum WorkshopStatus {
   COMPLETED = "COMPLETED"
 }
 
+export enum WorkshopCategory {
+  AI = "AI",
+  Career = "Career",
+  Data = "Data",
+  Design = "Design",
+  Product = "Product",
+  Cloud = "Cloud",
+  Security = "Security",
+  DevOps = "DevOps",
+  Mobile = "Mobile",
+  Web = "Web"
+}
+
 export enum RegistrationStatus {
   PENDING_PAYMENT = "PENDING_PAYMENT",
   CONFIRMED = "CONFIRMED",
@@ -144,7 +157,7 @@ export interface WorkshopDto {
   slug: string;
   title: string;
   description: string;
-  category: string;
+  category: WorkshopCategory;
   status: WorkshopStatus;
   startTime: string;
   endTime: string;
@@ -167,7 +180,7 @@ export type WorkshopPriceType = "all" | "free" | "paid";
 
 export interface WorkshopListFilters {
   keyword?: string;
-  category?: string;
+  category?: WorkshopCategory;
   roomId?: string;
   date?: string;
   fromDate?: string;
@@ -190,7 +203,7 @@ export interface WorkshopSeatAvailabilityDto {
 export interface CreateWorkshopRequest {
   title: string;
   description: string;
-  category: string;
+  category: WorkshopCategory;
   roomId: string;
   startTime: string;
   endTime: string;

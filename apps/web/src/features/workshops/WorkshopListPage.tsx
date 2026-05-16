@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, MapPin, Search, X } from "lucide-react";
 import type { WorkshopDto, WorkshopListFilters, WorkshopPriceType } from "@unihub/shared-types";
+import { WorkshopCategory } from "@unihub/shared-types";
 import { api } from "../../lib/api";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { AiSummaryStatusBadge } from "../ai-summary/AiSummaryRichText";
@@ -65,6 +66,8 @@ export function WorkshopListPage() {
     setSearchParams({}, { replace: true });
   }
 
+  const categoryOptions = Object.values(WorkshopCategory);
+
   return (
     <section>
       <div className="section-header">
@@ -83,7 +86,14 @@ export function WorkshopListPage() {
         </label>
         <label>
           Category
-          <input value={searchParams.get("category") ?? ""} onChange={(event) => updateParam("category", event.target.value)} />
+          <select value={searchParams.get("category") ?? ""} onChange={(event) => updateParam("category", event.target.value)}>
+            <option value="">All categories</option>
+            {categoryOptions.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Room
