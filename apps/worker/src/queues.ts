@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { Queue } from "bullmq";
+import { notificationDefaultJobOptions } from "./queue-options.js";
 
 function parseRedisUrl(redisUrl: string) {
   const url = new URL(redisUrl);
@@ -15,7 +16,7 @@ export const redisConnection = parseRedisUrl(process.env.REDIS_URL ?? "redis://l
 
 export const notificationQueue = new Queue("notifications", {
   connection: redisConnection,
-  defaultJobOptions: { attempts: 5, backoff: { type: "exponential", delay: 2000 } }
+  defaultJobOptions: notificationDefaultJobOptions
 });
 
 export const paymentQueue = new Queue("payments", {

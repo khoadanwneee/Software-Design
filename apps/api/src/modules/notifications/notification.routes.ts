@@ -1,15 +1,19 @@
 import { Router } from "express";
-import type { NotificationListParams } from "@unihub/shared-types";
+import type { NotificationListParams, UpdateNotificationPreferenceRequest } from "@unihub/shared-types";
 import { asyncHandler } from "../../common/utils/async-handler.js";
-import { validateQuery } from "../../common/middleware/validate.js";
+import { validateBody, validateQuery } from "../../common/middleware/validate.js";
 import { requireAuth } from "../auth/auth.middleware.js";
-import { notificationListQuerySchema } from "./notification.schemas.js";
+import { notificationListQuerySchema, updateNotificationPreferenceSchema } from "./notification.schemas.js";
 import {
   getUnreadNotificationCount,
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead
 } from "./notification.service.js";
+import {
+  getNotificationPreferences,
+  updateNotificationPreferences
+} from "./preference.service.js";
 
 export const notificationRouter = Router();
 
@@ -39,6 +43,46 @@ notificationRouter.get(
   "/unread-count",
   asyncHandler(async (req, res) => {
     res.json(await getUnreadNotificationCount(req.user!.id));
+  })
+);
+
+/**
+ * @openapi
+ * /api/notifications/preferences:
+ *   get:
+ *     summary: Get current user's notification channel preferences.
+ */
+notificationRouter.get(
+  "/preferences",
+  asyncHandler(async (req, res) => {
+    res.json(await getNotificationPreferences(req.user!.id));
+  })
+);
+
+/**
+ * @openapi
+ * /api/notifications/preferences:
+ *   put:
+ *     summary: Update current user's notification channel preferences.
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               inApp:
+ *                 type: boolean
+ *               email:
+ *                 type: boolean
+ *               telegram:
+ *                 type: boolean
+ */
+notificationRouter.put(
+  "/preferences",
+  validateBody(updateNotificationPreferenceSchema),
+  asyncHandler(async (req, res) => {
+    const input = req.body as UpdateNotificationPreferenceRequest;
+    res.json(await updateNotificationPreferences(req.user!.id, input));
   })
 );
 

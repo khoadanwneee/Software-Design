@@ -8,6 +8,7 @@ export async function publishNotificationJob(data: {
   dedupeKey: string;
   title: string;
   body: string;
+  metadata?: Record<string, unknown>;
 }) {
   try {
     await notificationQueue.add(data.eventType, data, {

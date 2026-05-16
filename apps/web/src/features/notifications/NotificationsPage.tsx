@@ -1,7 +1,8 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCheck, MailOpen } from "lucide-react";
-import type { NotificationItem, NotificationListStatus } from "@unihub/shared-types";
+import { Bell, CheckCheck, Mail, MailOpen, Send } from "lucide-react";
+import type { ReactNode } from "react";
+import type { NotificationItem, NotificationListStatus, NotificationPreferenceDto } from "@unihub/shared-types";
 import { api } from "../../lib/api";
 
 const pageSize = 20;
@@ -65,6 +66,7 @@ export function NotificationsPage() {
           </select>
         </label>
       </div>
+      <NotificationPreferencesPanel />
       {notifications.isLoading ? <p>Loading...</p> : null}
       {notifications.error ? <p className="error">{notifications.error.message}</p> : null}
       {markAll.error ? <p className="error">{markAll.error.message}</p> : null}
@@ -94,6 +96,102 @@ export function NotificationsPage() {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function NotificationPreferencesPanel() {
+  const queryClient = useQueryClient();
+  const preferences = useQuery({
+    queryKey: ["notifications", "preferences"],
+    queryFn: () => api.notificationApi.getPreferences()
+  });
+
+  const updatePreferences = useMutation({
+    mutationFn: (next: NotificationPreferenceDto) => api.notificationApi.updatePreferences(next),
+    onMutate: async (next) => {
+      await queryClient.cancelQueries({ queryKey: ["notifications", "preferences"] });
+      const previous = queryClient.getQueryData<NotificationPreferenceDto>(["notifications", "preferences"]);
+      queryClient.setQueryData(["notifications", "preferences"], next);
+      return { previous };
+    },
+    onError: (_error, _next, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["notifications", "preferences"], context.previous);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications", "preferences"] });
+    }
+  });
+
+  const current = preferences.data;
+
+  function toggle(name: keyof NotificationPreferenceDto) {
+    if (!current) {
+      return;
+    }
+    updatePreferences.mutate({ ...current, [name]: !current[name] });
+  }
+
+  return (
+    <div className="panel notification-preferences">
+      <div>
+        <h2>Notification settings</h2>
+        <p className="meta">Choose where UniHub sends workshop updates and reminders.</p>
+      </div>
+      {preferences.isLoading ? <p>Loading settings...</p> : null}
+      {preferences.error ? <p className="error">{preferences.error.message}</p> : null}
+      {updatePreferences.error ? <p className="error">{updatePreferences.error.message}</p> : null}
+      {current ? (
+        <div className="preference-toggle-list" aria-busy={updatePreferences.isPending}>
+          <PreferenceToggle
+            icon={<Bell size={18} />}
+            label="In-app"
+            checked={current.inApp}
+            disabled={updatePreferences.isPending}
+            onChange={() => toggle("inApp")}
+          />
+          <PreferenceToggle
+            icon={<Mail size={18} />}
+            label="Email"
+            checked={current.email}
+            disabled={updatePreferences.isPending}
+            onChange={() => toggle("email")}
+          />
+          <PreferenceToggle
+            icon={<Send size={18} />}
+            label="Telegram"
+            checked={current.telegram}
+            disabled={updatePreferences.isPending}
+            onChange={() => toggle("telegram")}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PreferenceToggle({
+  icon,
+  label,
+  checked,
+  disabled,
+  onChange
+}: {
+  icon: ReactNode;
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <label className="preference-toggle">
+      <span>
+        {icon}
+        {label}
+      </span>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} />
+    </label>
   );
 }
 

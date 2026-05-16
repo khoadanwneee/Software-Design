@@ -20,14 +20,14 @@ Tính năng notification gửi xác nhận đăng ký, thông báo đổi phòng
 
 ## Kịch bản lỗi
 
-| Lỗi | Cách hệ thống phản ứng |
-| --- | --- |
-| Email provider timeout | Mark attempt FAILED, retry sau; registration không rollback. |
-| User tắt email | Không gửi email, có thể gửi in-app nếu bật. |
-| Template thiếu biến | Mark FAILED_TEMPLATE, alert admin/dev. |
-| Message Broker gửi lại event | Dùng `dedupe_key` để tránh gửi trùng. |
-| Telegram chưa cấu hình | Channel disabled; core flow không đổi. |
-| Notification worker down | Event vẫn nằm trong queue; worker xử lý khi hồi phục. |
+| Lỗi                          | Cách hệ thống phản ứng                                       |
+| ---------------------------- | ------------------------------------------------------------ |
+| Email provider timeout       | Mark attempt FAILED, retry sau; registration không rollback. |
+| User tắt email               | Không gửi email, có thể gửi in-app nếu bật.                  |
+| Template thiếu biến          | Mark FAILED_TEMPLATE, alert admin/dev.                       |
+| Message Broker gửi lại event | Dùng `dedupe_key` để tránh gửi trùng.                        |
+| Telegram chưa cấu hình       | Channel disabled; core flow không đổi.                       |
+| Notification worker down     | Event vẫn nằm trong queue; worker xử lý khi hồi phục.        |
 
 ## Ràng buộc
 

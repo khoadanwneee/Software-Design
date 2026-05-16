@@ -6,6 +6,7 @@ import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../common/errors/app-error.js";
 import { sha256Buffer } from "../../common/utils/crypto.js";
 import { aiSummaryQueue, publishNotificationJob } from "../notifications/queue.js";
+import { resolveNotificationRecipients } from "../notifications/recipient-resolver.js";
 import { publishWorkshopSeatUpdate } from "./workshop-seat-events.js";
 
 const workshopInclude = {
@@ -396,7 +397,13 @@ export async function updateWorkshop(actorId: string, id: string, input: Record<
   });
 
   if (input.roomId || input.startTime || input.endTime || input.status) {
-    await notifyRegisteredUsers(id, "workshop.changed", "Workshop updated", `${workshop.title} has schedule or room updates.`);
+    await notifyRegisteredUsers(
+      id,
+      "workshop.changed",
+      "Workshop updated",
+      `${workshop.title} has schedule or room updates.`,
+      workshop.updatedAt.toISOString()
+    );
   }
 
   await publishWorkshopSeatUpdate(id);
@@ -426,24 +433,33 @@ export async function cancelWorkshop(actorId: string, id: string) {
     }
   });
 
-  await notifyRegisteredUsers(id, "workshop.cancelled", "Workshop cancelled", `${workshop.title} has been cancelled.`);
+  await notifyRegisteredUsers(
+    id,
+    "workshop.cancelled",
+    "Workshop cancelled",
+    `${workshop.title} has been cancelled.`,
+    (workshop.cancelledAt ?? workshop.updatedAt).toISOString()
+  );
   await publishWorkshopSeatUpdate(id);
   return toWorkshopDto(workshop);
 }
 
-async function notifyRegisteredUsers(workshopId: string, eventType: string, title: string, body: string) {
-  const registrations = await prisma.registration.findMany({
-    where: { workshopId, status: "CONFIRMED" },
-    select: { userId: true }
-  });
+async function notifyRegisteredUsers(
+  workshopId: string,
+  eventType: string,
+  title: string,
+  body: string,
+  versionKey: string
+) {
+  const recipientIds = await resolveNotificationRecipients(eventType, { workshopId });
 
   await Promise.all(
-    registrations.map((registration) =>
+    recipientIds.map((userId) =>
       publishNotificationJob({
         eventType,
-        userId: registration.userId,
+        userId,
         workshopId,
-        dedupeKey: `${eventType}:${workshopId}:${registration.userId}:${Date.now()}`,
+        dedupeKey: `${eventType}:${workshopId}:${userId}:${versionKey}`,
         title,
         body
       })

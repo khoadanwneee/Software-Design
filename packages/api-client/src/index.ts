@@ -8,6 +8,7 @@ import type {
   LoginRequest,
   LoginResponse,
   NotificationListParams,
+  NotificationPreferenceDto,
   NotificationsResponse,
   OfflineCheckinCacheResponse,
   OfflineCheckinSyncRequest,
@@ -27,7 +28,8 @@ import type {
   WorkshopListFilters,
   WorkshopSeatAvailabilityDto,
   UnreadCountResponse,
-  NotificationItem
+  NotificationItem,
+  UpdateNotificationPreferenceRequest
 } from "@unihub/shared-types";
 
 export interface ApiClientOptions {
@@ -261,6 +263,12 @@ export function createApiClient(options: ApiClientOptions) {
       list: (params: NotificationListParams = {}) =>
         client.request<NotificationsResponse>(`/notifications${toQueryString(params)}`),
       unreadCount: () => client.request<UnreadCountResponse>("/notifications/unread-count"),
+      getPreferences: () => client.request<NotificationPreferenceDto>("/notifications/preferences"),
+      updatePreferences: (body: UpdateNotificationPreferenceRequest) =>
+        client.request<NotificationPreferenceDto>("/notifications/preferences", {
+          method: "PUT",
+          body: JSON.stringify(body)
+        }),
       markRead: (id: string) =>
         client.request<NotificationItem>(`/notifications/${id}/read`, { method: "PATCH" }),
       markAllRead: () => client.request<{ updated: number }>("/notifications/read-all", { method: "PATCH" })

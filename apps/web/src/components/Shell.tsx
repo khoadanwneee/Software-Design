@@ -28,10 +28,6 @@ export function Shell() {
           <NavLink to="/workshops">
             <ClipboardList size={18} /> Workshops
           </NavLink>
-          <NavLink to="/notifications" className="nav-notifications">
-            <Bell size={18} /> Notifications
-            {unread.data && unread.data.count > 0 ? <span className="nav-badge">{unread.data.count}</span> : null}
-          </NavLink>
           {canCheckin ? (
             <NavLink to="/checkin">
               <QrCode size={18} /> Check-in
@@ -44,6 +40,19 @@ export function Shell() {
           ) : null}
         </nav>
         <div className="session">
+          <Link
+            to="/notifications"
+            className="icon-button icon-link nav-bell"
+            aria-label="Notifications"
+            title="Notifications"
+          >
+            <Bell size={18} />
+            {unread.data && unread.data.count > 0 ? (
+              <span className="icon-badge" aria-hidden="true">
+                {unread.data.count}
+              </span>
+            ) : null}
+          </Link>
           <span className={online ? "status online" : "status offline"}>
             {online ? <Wifi size={16} /> : <WifiOff size={16} />}
             {online ? "Online" : "Offline"}
