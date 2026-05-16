@@ -338,18 +338,20 @@ async function notifyImportFinished(
       : `Imported ${successRows} row(s), ${failedRows} row(s) failed.`;
 
   await Promise.allSettled(
-    Array.from(userIds).map((userId) =>
-      notificationQueue.add(
+    Array.from(userIds).map((userId) => {
+      const dedupeKey = `student-import:${runId}:${userId}:${status}`;
+      const jobId = `dedupe-${Buffer.from(dedupeKey).toString("base64url")}`;
+      return notificationQueue.add(
         "student_import.finished",
         {
           eventType: "student_import.finished",
           userId,
-          dedupeKey: `student-import:${runId}:${userId}:${status}`,
+          dedupeKey,
           title,
           body
         },
-        { jobId: `student-import:${runId}:${userId}:${status}` }
-      )
-    )
+        { jobId }
+      );
+    })
   );
 }

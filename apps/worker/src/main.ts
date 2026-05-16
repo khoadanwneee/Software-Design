@@ -3,6 +3,7 @@ import { Worker } from "bullmq";
 import { prisma } from "@unihub/db";
 import { paymentQueue, redisConnection, workshopQueue } from "./queues.js";
 import { processNotification } from "./processors/notification.processor.js";
+import { processReminderScan, scheduleReminderScans } from "./processors/reminder.processor.js";
 import { processPayment } from "./processors/payment.processor.js";
 import { processAiSummary } from "./processors/ai-summary.processor.js";
 import { processStudentImport } from "./processors/student-import.processor.js";
@@ -10,7 +11,16 @@ import { processCheckinSync } from "./processors/checkin-sync.processor.js";
 import { processWorkshopStatus } from "./processors/workshop-status.processor.js";
 
 const workers = [
-  new Worker("notifications", processNotification, { connection: redisConnection, concurrency: 5 }),
+  new Worker(
+    "notifications",
+    async (job) => {
+      if (job.name === "workshop.reminder.scan") {
+        return processReminderScan(job as any);
+      }
+      return processNotification(job as any);
+    },
+    { connection: redisConnection, concurrency: 5 }
+  ),
   new Worker("payments", processPayment, { connection: redisConnection, concurrency: 2 }),
   new Worker("ai-summary", processAiSummary, { connection: redisConnection, concurrency: 2 }),
   new Worker("student-import", processStudentImport, { connection: redisConnection, concurrency: 1 }),

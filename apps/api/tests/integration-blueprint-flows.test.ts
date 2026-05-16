@@ -1,19 +1,33 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { resolveNotificationRecipients } from "../src/modules/notifications/recipient-resolver";
 
-describe.skip("database-backed blueprint flows", () => {
-  it("does not overbook when two registrations race for one remaining seat", async () => {
-    // Requires Postgres + Prisma seed. See README test flow.
+describe("blueprint flow helpers", () => {
+  it("resolves notification recipients from confirmed workshop registrations only", async () => {
+    const client = {
+      registration: {
+        findMany: async ({ where }: any) => {
+          expect(where).toMatchObject({ workshopId: "workshop-1", status: "CONFIRMED" });
+          return [{ userId: "student-1" }, { userId: "student-2" }];
+        }
+      }
+    };
+
+    await expect(
+      resolveNotificationRecipients("workshop.changed", { workshopId: "workshop-1" }, client as any)
+    ).resolves.toEqual(["student-1", "student-2"]);
   });
 
-  it("returns previous result for a repeated payment idempotency key", async () => {
-    // Requires Postgres + Redis.
-  });
+  it("keeps direct notification recipients when userId is already known", async () => {
+    const client = {
+      registration: {
+        findMany: async () => {
+          throw new Error("registration lookup should not be called");
+        }
+      }
+    };
 
-  it("marks repeated offline check-in sync as duplicate/synced", async () => {
-    // Requires Postgres + seeded QR token.
-  });
-
-  it("imports valid CSV rows and logs duplicate/error rows", async () => {
-    // Requires worker + Postgres.
+    await expect(
+      resolveNotificationRecipients("registration.confirmed", { userId: "student-1" }, client as any)
+    ).resolves.toEqual(["student-1"]);
   });
 });

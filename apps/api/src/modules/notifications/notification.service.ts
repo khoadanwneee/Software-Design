@@ -4,6 +4,7 @@ import type {
   NotificationsResponse,
   UnreadCountResponse
 } from "@unihub/shared-types";
+import { NotificationChannel, NotificationStatus } from "@unihub/shared-types";
 import { ErrorCodes } from "@unihub/shared-utils";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../common/errors/app-error.js";
@@ -27,7 +28,12 @@ function toNotificationItem(notification: NonNullable<NotificationWithWorkshop>)
 
 async function findNotificationForUser(userId: string, notificationId: string) {
   return prisma.notification.findFirst({
-    where: { id: notificationId, userId },
+    where: {
+      id: notificationId,
+      userId,
+      channel: NotificationChannel.IN_APP,
+      status: { in: [NotificationStatus.SENT, NotificationStatus.PARTIAL_FAILED] }
+    },
     include: { workshop: { select: { id: true, title: true } } }
   });
 }
@@ -37,6 +43,8 @@ export async function listNotifications(userId: string, params: NotificationList
   const limit = params.limit ?? 20;
   const where = {
     userId,
+    channel: NotificationChannel.IN_APP,
+    status: { in: [NotificationStatus.SENT, NotificationStatus.PARTIAL_FAILED] },
     readAt: params.status === "UNREAD" ? null : params.status === "READ" ? { not: null } : undefined
   };
 
@@ -61,7 +69,14 @@ export async function listNotifications(userId: string, params: NotificationList
 }
 
 export async function getUnreadNotificationCount(userId: string): Promise<UnreadCountResponse> {
-  const count = await prisma.notification.count({ where: { userId, readAt: null } });
+  const count = await prisma.notification.count({
+    where: {
+      userId,
+      channel: NotificationChannel.IN_APP,
+      status: { in: [NotificationStatus.SENT, NotificationStatus.PARTIAL_FAILED] },
+      readAt: null
+    }
+  });
   return { count };
 }
 
@@ -83,7 +98,12 @@ export async function markNotificationRead(userId: string, notificationId: strin
 export async function markAllNotificationsRead(userId: string): Promise<{ updated: number }> {
   const now = new Date();
   const result = await prisma.notification.updateMany({
-    where: { userId, readAt: null },
+    where: {
+      userId,
+      channel: NotificationChannel.IN_APP,
+      status: { in: [NotificationStatus.SENT, NotificationStatus.PARTIAL_FAILED] },
+      readAt: null
+    },
     data: { readAt: now }
   });
 

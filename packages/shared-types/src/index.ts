@@ -74,6 +74,9 @@ export enum NotificationStatus {
   PENDING = "PENDING",
   SENT = "SENT",
   FAILED = "FAILED",
+  PARTIAL_FAILED = "PARTIAL_FAILED",
+  FAILED_TEMPLATE = "FAILED_TEMPLATE",
+  FAILED_PROVIDER = "FAILED_PROVIDER",
   SKIPPED = "SKIPPED"
 }
 
@@ -81,6 +84,15 @@ export enum NotificationChannel {
   IN_APP = "IN_APP",
   EMAIL = "EMAIL",
   TELEGRAM = "TELEGRAM"
+}
+
+export enum NotificationDeliveryStatus {
+  PENDING = "PENDING",
+  SENT = "SENT",
+  FAILED = "FAILED",
+  FAILED_TEMPLATE = "FAILED_TEMPLATE",
+  SKIPPED = "SKIPPED",
+  PREFERENCE_DISABLED = "PREFERENCE_DISABLED"
 }
 
 export type NotificationReadStatus = "UNREAD" | "READ";
@@ -283,6 +295,30 @@ export interface NotificationListParams {
 
 export interface UnreadCountResponse {
   count: number;
+}
+
+export interface NotificationPreferenceDto {
+  inApp: boolean;
+  email: boolean;
+  telegram: boolean;
+}
+
+export interface UpdateNotificationPreferenceRequest {
+  inApp?: boolean;
+  email?: boolean;
+  telegram?: boolean;
+}
+
+export interface NotificationDeliveryDto {
+  id: string;
+  notificationId: string;
+  channel: NotificationChannel;
+  status: NotificationDeliveryStatus;
+  providerMsgId?: string | null;
+  errorMessage?: string | null;
+  attemptCount: number;
+  sentAt?: string | null;
+  createdAt: string;
 }
 
 export interface StudentImportErrorDto {

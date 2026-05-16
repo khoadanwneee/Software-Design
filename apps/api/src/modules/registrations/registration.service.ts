@@ -73,7 +73,7 @@ export async function createFreeRegistration(input: {
 }): Promise<RegistrationDto> {
   await assertVerifiedStudent(input.userId);
 
-  return withIdempotency({
+  const result = await withIdempotency({
     scope: "registration.free",
     key: input.idempotencyKey,
     payload: { userId: input.userId, workshopId: input.workshopId },
@@ -113,20 +113,21 @@ export async function createFreeRegistration(input: {
           qrToken: qr.qrPayload
         } satisfies RegistrationDto;
       });
-
-      await publishNotificationJob({
-        eventType: "registration.confirmed",
-        userId: input.userId,
-        workshopId: input.workshopId,
-        dedupeKey: `registration.confirmed:${result.id}`,
-        title: "Registration confirmed",
-        body: "Your workshop registration is confirmed."
-      });
-      await publishWorkshopSeatUpdate(input.workshopId);
-
       return result;
     }
   });
+
+  await publishNotificationJob({
+    eventType: "registration.confirmed",
+    userId: input.userId,
+    workshopId: input.workshopId,
+    dedupeKey: `registration.confirmed:${result.id}`,
+    title: "Registration confirmed",
+    body: "Your workshop registration is confirmed."
+  });
+  await publishWorkshopSeatUpdate(input.workshopId);
+
+  return result;
 }
 
 export async function createPaidRegistration(input: {
