@@ -105,17 +105,6 @@ pnpm --filter @unihub/api dev
 pnpm --filter @unihub/worker dev
 pnpm --filter @unihub/web dev
 pnpm --filter @unihub/mobile dev
-```
-
-Default URLs:
-
-- Web app: `http://localhost:5173`
-- Web app: `http://192.168.1.5:5173`
-- API: `http://192.168.1.5:4000/api`
-- API docs: `http://192.168.1.5:4000/docs`
-- Health: `http://192.168.1.5:4000/health`
-- Mailpit: `http://localhost:8025`
-- Mobile: Expo dev server opens in the terminal when running `pnpm --filter @unihub/mobile dev`.
 
 ## Run AI Summary Locally
 
@@ -317,92 +306,9 @@ Student accounts (from `tmp/student-csv/students_valid.csv`) use password format
 | STUDENT | `sv202611@unihub.local` | `KHTN@11` |
 | STUDENT | `sv202612@unihub.local` | `KHTN@12` |
 
+Note: You have to start all the system and wait for student-import feature work to have these accounts in your database.
 ## Mobile Setup
 
 1. Install Expo Go on your phone (iOS/Android).
 2. Run `pnpm --filter @unihub/mobile dev`.
 3. Scan the QR code shown in the terminal to open the app.
-
-## Flow Tests
-
-Student:
-
-1. Login as `student1@unihub.local`.
-2. Open `/workshops`.
-3. Open a free workshop and register.
-4. Open the QR page.
-5. Open a paid workshop and create a mock payment.
-
-Payment mock:
-
-1. Create a paid registration.
-2. Trigger `POST /api/payments/webhook/mock` with `signature=unihub-dev-signature`, a matching `providerOrderId`, a unique `providerTransactionId`, and `status=success`.
-3. Refresh the registration QR route after webhook success.
-
-Check-in:
-
-1. Login as `staff@unihub.local`.
-2. Open `/checkin`.
-3. Select a workshop.
-4. Scan or paste a QR payload.
-5. Turn network off and scan again to create an IndexedDB queue item.
-6. Open `/checkin/queue`.
-7. Turn network on and press retry.
-
-Admin:
-
-1. Login as `organizer@unihub.local`.
-2. Open `/admin/workshops`.
-3. Create/edit/cancel a workshop.
-4. Open `/admin/statistics`.
-5. Open `/admin/ai-summary` and choose a PDF file to create an AI summary job.
-6. Call `POST /api/student-import/jobs` with CSV text to create an import job.
-
-## Tests
-
-```sh
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-```
-
-Database-backed test cases are scaffolded in `apps/api/tests/integration-blueprint-flows.test.ts` and are marked skipped until a test database lifecycle is wired into CI.
-
-## Implemented
-
-- pnpm monorepo and Turbo tasks.
-- React client-side PWA with manifest, service worker, offline fallback, app-shell caching, and API response no-store behavior.
-- IndexedDB check-in queue with `PENDING`, `SYNCED`, `FAILED`, `DUPLICATE`, `CONFLICT` statuses and retry cap.
-- Express API with JWT auth, RBAC, Zod validation, centralized errors, Helmet, CORS, logging, Swagger.
-- Redis-backed rate limits with endpoint-specific registration/payment/check-in sync policies.
-- Prisma schema, migration, and seed data.
-- PostgreSQL atomic seat reservation for registration.
-- Payment idempotency, mock provider, webhook, and circuit breaker.
-- BullMQ workers with retry/backoff and mock providers.
-- CSV import worker with row validation and upsert.
-
-## Known Limitations
-
-- Binary PDF storage is represented by metadata and a local storage key; object storage/multipart upload is not fully implemented.
-- The UI is functional scaffold quality, not final product design.
-- Payment provider and AI provider are mocks.
-- Staff-to-workshop assignment is not modeled yet.
-- Realtime seat updates use SSE over Redis pub/sub with short-polling fallback in the web app.
-- Test database lifecycle is not wired into CI.
-
-## ASSUMPTION
-
-- BullMQ on Redis is the required job queue implementation.
-- One React PWA contains student, admin, and check-in routes.
-- Seed data uses future workshop dates relative to the current project date.
-- QR payload uses an opaque random token and does not include student email/MSSV.
-
-## UNSPECIFIED BY BLUEPRINT
-
-- Exact visual design system.
-- Exact payment gateway provider, webhook signature format, and refund behavior.
-- Exact AI provider/model/prompt and PDF extraction implementation.
-- Exact CSV quoting/escaping rules beyond required columns.
-- Exact refresh token/session refresh policy.
-- Exact check-in staff assignment policy per room/workshop.
