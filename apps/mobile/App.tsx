@@ -43,19 +43,19 @@ function prettyTime(ts: string) {
 }
 
 function statusText(status: OfflineSyncStatus) {
-  if (status === OfflineSyncStatus.PENDING) return "Đã lưu offline";
-  if (status === OfflineSyncStatus.SYNCED) return "Check-in thành công";
-  if (status === OfflineSyncStatus.DUPLICATE) return "Đã check-in";
-  if (status === OfflineSyncStatus.CONFLICT) return "Xung đột";
-  return "Thất bại";
+  if (status === OfflineSyncStatus.PENDING) return "Saved offline";
+  if (status === OfflineSyncStatus.SYNCED) return "Check-in successful";
+  if (status === OfflineSyncStatus.DUPLICATE) return "Already checked in";
+  if (status === OfflineSyncStatus.CONFLICT) return "Conflict";
+  return "Failed";
 }
 
 function fallbackStatusMessage(status: OfflineSyncStatus) {
-  if (status === OfflineSyncStatus.PENDING) return "Đã lưu check-in offline.";
-  if (status === OfflineSyncStatus.SYNCED) return "Check-in thành công.";
-  if (status === OfflineSyncStatus.DUPLICATE) return "Đã check-in trước đó.";
-  if (status === OfflineSyncStatus.CONFLICT) return "Xung đột khi đồng bộ.";
-  return "Check-in thất bại.";
+  if (status === OfflineSyncStatus.PENDING) return "Check-in saved offline.";
+  if (status === OfflineSyncStatus.SYNCED) return "Check-in successful.";
+  if (status === OfflineSyncStatus.DUPLICATE) return "This QR has already been checked in.";
+  if (status === OfflineSyncStatus.CONFLICT) return "Sync conflict occurred.";
+  return "Check-in failed.";
 }
 
 function statusColor(status: OfflineSyncStatus) {
@@ -149,7 +149,7 @@ export default function App() {
 
   async function handleLogin() {
     if (!email || !password) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập email và mật khẩu.");
+      Alert.alert("Missing information", "Please enter email and password.");
       return;
     }
     setBusy(true);
@@ -157,7 +157,7 @@ export default function App() {
       const res = await api.authApi.login({ email: email.trim(), password });
       const okRole = res.user.roles.includes(Role.CHECKIN_STAFF) || res.user.roles.includes(Role.ADMIN);
       if (!okRole) {
-        Alert.alert("Không đủ quyền", "Mobile check-in chỉ dành cho staff hoặc admin.");
+        Alert.alert("Insufficient permission", "Mobile check-in is only available for staff or admin.");
         return;
       }
       const next = { accessToken: res.accessToken, user: res.user };
@@ -166,10 +166,10 @@ export default function App() {
         [USER_KEY, JSON.stringify(next.user)]
       ]);
       setSession(next);
-      setLastResult("Đăng nhập thành công.");
+      setLastResult("Login successful.");
       if (!cameraPermission?.granted) await requestCameraPermission();
     } catch (error) {
-      Alert.alert("Lỗi", error instanceof Error ? error.message : "Đăng nhập thất bại");
+      Alert.alert("Error", error instanceof Error ? error.message : "Login failed");
     } finally {
       setBusy(false);
     }
@@ -178,7 +178,7 @@ export default function App() {
   async function handleLogout() {
     await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, USER_KEY]);
     setSession(null);
-    setLastResult("Đã đăng xuất.");
+    setLastResult("Logged out.");
   }
 
   async function syncOfflineQueue() {
@@ -205,14 +205,14 @@ export default function App() {
       });
       await saveOfflineQueue(updated);
       await refreshQueueState();
-      setLastResult("Đồng bộ offline xong.");
+      setLastResult("Offline sync completed.");
       if (res.results.length > 0) {
         const lines = res.results.map((result) => {
           const label = statusText(result.status);
           const message = result.message ?? result.errorCode ?? fallbackStatusMessage(result.status);
           return `${label}: ${message}`;
         });
-        Alert.alert("Kết quả đồng bộ", lines.join("\n"));
+        Alert.alert("Sync results", lines.join("\n"));
       }
     } catch (error) {
       const updated = queue.map((q) =>
@@ -228,8 +228,8 @@ export default function App() {
       );
       await saveOfflineQueue(updated);
       await refreshQueueState();
-      setLastResult("Sync lỗi, sẽ thử lại khi có mạng.");
-      Alert.alert("Đồng bộ thất bại", error instanceof Error ? error.message : "Sync failed");
+      setLastResult("Sync failed. It will retry when connection is back.");
+      Alert.alert("Sync failed", error instanceof Error ? error.message : "Sync failed");
     }
   }
 
@@ -255,7 +255,7 @@ export default function App() {
     queue.push(record);
     await saveOfflineQueue(queue);
     await refreshQueueState();
-    setLastResult("Đã lưu check-in offline.");
+    setLastResult("Offline check-in saved.");
     Alert.alert(statusText(OfflineSyncStatus.PENDING), fallbackStatusMessage(OfflineSyncStatus.PENDING));
   }
 
@@ -269,12 +269,12 @@ export default function App() {
       const parsed = parseQrPayload(trimmedPayload);
       workshopId = parsed.workshopId ?? "";
     } catch {
-      Alert.alert("QR lỗi", "QR payload không hợp lệ.");
+      Alert.alert("Invalid QR", "QR payload is invalid.");
       return false;
     }
 
     if (!workshopId) {
-      Alert.alert("Thiếu workshop", "QR không có workshop_id nên không thể check-in.");
+      Alert.alert("Missing workshop", "QR does not contain workshop_id, so check-in cannot proceed.");
       return false;
     }
 
@@ -296,11 +296,11 @@ export default function App() {
     } catch (error) {
       if (error instanceof ApiClientError) {
         setLastResult(error.message);
-          Alert.alert("Check-in thất bại", error.message);
+        Alert.alert("Check-in failed", error.message);
         return false;
       }
       await saveLocalOfflineCheckin(trimmedPayload, workshopId);
-      setLastResult("Online lỗi, đã fallback offline.");
+      setLastResult("Online request failed, switched to offline fallback.");
       return true;
     } finally {
       setBusy(false);
@@ -323,7 +323,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.center}>
         <ActivityIndicator size="large" color="#0d5642" />
-        <Text style={styles.note}>Đang tải...</Text>
+        <Text style={styles.note}>Loading...</Text>
       </SafeAreaView>
     );
   }
@@ -339,11 +339,11 @@ export default function App() {
 
         {!session ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Đăng nhập</Text>
+            <Text style={styles.cardTitle}>Login</Text>
             <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="Email" />
-            <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder="Mật khẩu" />
+            <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder="Password" />
             <Pressable style={styles.buttonPrimary} disabled={busy} onPress={handleLogin}>
-              <Text style={styles.buttonPrimaryText}>{busy ? "Đang đăng nhập..." : "Đăng nhập"}</Text>
+              <Text style={styles.buttonPrimaryText}>{busy ? "Logging in..." : "Login"}</Text>
             </Pressable>
           </View>
         ) : (
@@ -353,16 +353,16 @@ export default function App() {
                 <Text style={[styles.tabText, activeTab === "SCAN" && styles.tabTextActive]}>Check-in</Text>
               </Pressable>
               <Pressable style={[styles.tabBtn, activeTab === "HISTORY" && styles.tabBtnActive]} onPress={() => setActiveTab("HISTORY")}>
-                <Text style={[styles.tabText, activeTab === "HISTORY" && styles.tabTextActive]}>Lịch sử offline</Text>
+                <Text style={[styles.tabText, activeTab === "HISTORY" && styles.tabTextActive]}>Offline history</Text>
               </Pressable>
             </View>
 
             {activeTab === "SCAN" ? (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Quét QR</Text>
+                <Text style={styles.cardTitle}>Scan QR</Text>
                 {!cameraPermission?.granted ? (
                   <Pressable style={styles.buttonPrimary} onPress={() => requestCameraPermission()}>
-                    <Text style={styles.buttonPrimaryText}>Cấp quyền camera</Text>
+                    <Text style={styles.buttonPrimaryText}>Grant camera permission</Text>
                   </Pressable>
                 ) : (
                   <View style={styles.scannerWrap}>
@@ -376,23 +376,23 @@ export default function App() {
                 )}
                 <View style={styles.rowButtons}>
                   <Pressable style={styles.buttonSecondaryCompact} disabled={busy || !isOnline} onPress={() => void syncOfflineQueue()}>
-                    <Text style={styles.buttonSecondaryText}>Đồng bộ</Text>
+                    <Text style={styles.buttonSecondaryText}>Sync</Text>
                   </Pressable>
                   <Pressable style={styles.buttonSecondaryCompact} disabled={busy} onPress={handleLogout}>
-                    <Text style={styles.buttonSecondaryText}>Đăng xuất</Text>
+                    <Text style={styles.buttonSecondaryText}>Logout</Text>
                   </Pressable>
                 </View>
               </View>
             ) : (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Lịch sử lưu offline</Text>
+                <Text style={styles.cardTitle}>Offline saved history</Text>
                 {queueRecords.length === 0 ? (
-                  <Text style={styles.note}>Chưa có bản ghi local.</Text>
+                  <Text style={styles.note}>No local records yet.</Text>
                 ) : (
                   queueRecords.map((item) => (
                     <View key={item.clientCheckinId} style={styles.queueItem}>
                       <Text style={styles.queueMeta}>Workshop: {item.workshopId}</Text>
-                      <Text style={styles.queueMeta}>Thời gian: {prettyTime(item.createdAt)}</Text>
+                      <Text style={styles.queueMeta}>Time: {prettyTime(item.createdAt)}</Text>
                       <Text style={[styles.badge, { backgroundColor: statusColor(item.syncStatus) }]}>{statusText(item.syncStatus)}</Text>
                     </View>
                   ))

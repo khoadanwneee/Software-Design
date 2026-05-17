@@ -24,7 +24,7 @@ export function AiSummaryRichText({ summary }: AiSummaryRichTextProps) {
           .map((line) => line.trim())
           .filter(Boolean);
         const bulletLines = lines
-          .map((line) => line.match(/^[-*•]\s+(.+)$/)?.[1]?.trim())
+          .map((line) => line.match(/^[-*�]\s+(.+)$/)?.[1]?.trim())
           .filter((line): line is string => Boolean(line));
         const numberedLines = lines
           .map((line) => line.match(/^\d+[.)]\s+(.+)$/)?.[1]?.trim())
@@ -77,7 +77,7 @@ export function AiSummaryStatusBadge({ status }: { status?: AiSummaryStatus | nu
   if (status === AiSummaryStatus.PENDING || status === AiSummaryStatus.PROCESSING) {
     return (
       <span className="badge ai-processing">
-        <Clock3 size={14} /> AI đang xử lý
+        <Clock3 size={14} /> AI processing
       </span>
     );
   }
@@ -85,30 +85,30 @@ export function AiSummaryStatusBadge({ status }: { status?: AiSummaryStatus | nu
   if (status === AiSummaryStatus.FAILED) {
     return (
       <span className="badge ai-failed">
-        <TriangleAlert size={14} /> AI lỗi
+        <TriangleAlert size={14} /> AI failed
       </span>
     );
   }
 
   return (
     <span className="badge ai-empty">
-      <Sparkles size={14} /> Chưa có AI summary
+      <Sparkles size={14} /> No AI summary yet
     </span>
   );
 }
 
 export function aiSummaryStatusText(status?: AiSummaryStatus | null) {
   if (status === AiSummaryStatus.DONE) {
-    return "AI summary đã hoàn tất.";
+    return "AI summary is complete.";
   }
   if (status === AiSummaryStatus.PROCESSING) {
-    return "AI đang đọc PDF và tạo tóm tắt.";
+    return "AI is reading the PDF and generating a summary.";
   }
   if (status === AiSummaryStatus.PENDING) {
-    return "PDF đã được nhận. AI summary đang chờ worker xử lý.";
+    return "PDF received. AI summary is waiting for worker processing.";
   }
   if (status === AiSummaryStatus.FAILED) {
-    return "AI summary thất bại. Vui lòng kiểm tra worker hoặc thử upload lại.";
+    return "AI summary failed. Please check the worker or re-upload the PDF.";
   }
-  return "Chưa có AI summary.";
+  return "No AI summary yet.";
 }

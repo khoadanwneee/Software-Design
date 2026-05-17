@@ -256,6 +256,13 @@ export async function getMyRegistrationByWorkshop(input: { userId: string; works
         userId: input.userId,
         workshopId: input.workshopId
       }
+    },
+    include: {
+      qrToken: {
+        include: {
+          checkin: true
+        }
+      }
     }
   });
 
@@ -266,6 +273,7 @@ export async function getMyRegistrationByWorkshop(input: { userId: string; works
   return {
     id: registration.id,
     workshopId: registration.workshopId,
-    status: registration.status
+    status: registration.status,
+    checkedInAt: registration.qrToken?.checkin?.checkedInAt?.toISOString() ?? null
   };
 }

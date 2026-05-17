@@ -156,7 +156,7 @@ function WorkshopCard({ workshop }: { workshop: WorkshopDto }) {
     <Link to={`/workshops/${workshop.id}`} className="workshop-card">
       <div className="badge-row">
         <span className={workshop.priceAmount > 0 ? "badge paid" : "badge free"}>
-          {workshop.priceAmount > 0 ? `${workshop.priceAmount.toLocaleString("vi-VN")} ${workshop.currency}` : "Free"}
+          {workshop.priceAmount > 0 ? `${workshop.priceAmount.toLocaleString("en-US")} ${workshop.currency}` : "Free"}
         </span>
         <AiSummaryStatusBadge status={workshop.aiSummary?.status} />
       </div>
@@ -164,14 +164,14 @@ function WorkshopCard({ workshop }: { workshop: WorkshopDto }) {
       <p>{workshop.description}</p>
       <div className="meta">
         <span>
-          <CalendarDays size={16} /> {new Date(workshop.startTime).toLocaleString("vi-VN")}
+          <CalendarDays size={16} /> {new Date(workshop.startTime).toLocaleString("en-US")}
         </span>
         <span>
           <MapPin size={16} /> {workshop.room.name}
         </span>
       </div>
       <progress value={seat.registeredCount} max={seat.capacity} />
-      <small className={isFull ? "sold-out" : undefined}>{isFull ? "Hết chỗ" : `${seat.remainingSeats} chỗ còn lại`}</small>
+      <small className={isFull ? "sold-out" : undefined}>{isFull ? "Sold out" : `${seat.remainingSeats} seats left`}</small>
     </Link>
   );
 }

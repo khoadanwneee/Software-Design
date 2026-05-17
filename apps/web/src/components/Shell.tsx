@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, ClipboardList, LogOut, QrCode, Settings, Wifi, WifiOff } from "lucide-react";
+import { Bell, ClipboardList, LogOut, Settings, Wifi, WifiOff } from "lucide-react";
 import { Role } from "@unihub/shared-types";
 import { useOnlineStatus } from "../lib/useOnlineStatus";
 import { api } from "../lib/api";
@@ -10,11 +10,10 @@ export function Shell() {
   const online = useOnlineStatus();
   const { user, logout } = useAuth();
   const canAdmin = user?.roles.some((role) => [Role.ADMIN, Role.ORGANIZER].includes(role));
-  const canCheckin = user?.roles.some((role) => [Role.ADMIN, Role.ORGANIZER, Role.CHECKIN_STAFF].includes(role));
   const unread = useQuery({
     queryKey: ["notifications", "unread-count"],
     queryFn: () => api.notificationApi.unreadCount(),
-    refetchInterval: 30_000,
+    refetchInterval: 3000,
     enabled: Boolean(user)
   });
 
@@ -28,11 +27,6 @@ export function Shell() {
           <NavLink to="/workshops">
             <ClipboardList size={18} /> Workshops
           </NavLink>
-          {canCheckin ? (
-            <NavLink to="/checkin">
-              <QrCode size={18} /> Check-in
-            </NavLink>
-          ) : null}
           {canAdmin ? (
             <NavLink to="/admin">
               <Settings size={18} /> Admin

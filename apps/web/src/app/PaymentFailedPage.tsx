@@ -3,12 +3,11 @@ import { Link } from "react-router-dom";
 export function PaymentFailedPage() {
   return (
     <section className="panel">
-      <h1>Thanh toan that bai</h1>
-      <p>Giao dich chua thanh cong. Vui long thu lai hoac chon phuong thuc khac.</p>
+      <h1>Payment failed</h1>
+      <p>Your transaction was not successful. Please try again or choose a different payment method.</p>
       <Link className="button" to="/workshops">
-        Quay lai workshop
+        Back to workshops
       </Link>
     </section>
   );
 }
-

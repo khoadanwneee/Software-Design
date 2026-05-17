@@ -4,9 +4,9 @@ export function ForbiddenPage() {
   return (
     <section className="panel">
       <h1>403</h1>
-      <p>Tài khoản hiện tại không có quyền truy cập màn hình này.</p>
+      <p>Your current account does not have permission to access this page.</p>
       <Link className="button" to="/workshops">
-        Về danh sách workshop
+        Back to workshop list
       </Link>
     </section>
   );

@@ -1,47 +1,87 @@
-# Đặc tả: Admin và báo cáo
+# Đặc tả: Admin và thống kê
 
 ## Mô tả
 
-Tính năng admin phục vụ ban tổ chức và quản trị viên. Admin Web cho phép quản lý workshop, xem thống kê đăng ký/check-in, theo dõi import CSV, kiểm tra trạng thái AI summary/payment và xem audit log.
+Hệ thống cung cấp trang quản trị dành cho `ADMIN` và `ORGANIZER` trên nền tảng web để quản lý workshop, phòng học, người dùng, import sinh viên, AI summary và theo dõi thống kê tổng quan của hệ thống.
 
-## Luồng chính
+## Chức năng chính
 
-1. Organizer/Admin đăng nhập Admin Web.
-2. Admin Web route guard kiểm tra role.
-3. Backend API kiểm tra lại role bằng RBAC guard.
-4. Người dùng có quyền có thể:
-   - Tạo/sửa/hủy workshop.
-   - Upload PDF.
-   - Xem danh sách registration theo workshop.
-   - Xem số check-in, no-show, revenue.
-   - Xem import job status và row errors.
-   - Xem audit log cho thao tác quan trọng.
-5. Backend ghi audit log cho hành động thay đổi dữ liệu.
+### Dashboard thống kê
 
-## Kịch bản lỗi
+* Hiển thị thống kê tổng quan:
 
-| Lỗi | Cách hệ thống phản ứng |
-| --- | --- |
-| Student truy cập admin route | Client redirect/403; backend vẫn chặn 403. |
-| Organizer sửa workshop không thuộc quyền | Backend trả 403. |
-| Dashboard query nặng | Dùng read model/materialized view/cache; API không lock transaction chính. |
-| Import job lỗi | Admin dashboard hiển thị FAILED/DONE_WITH_ERRORS và link row log. |
-| Payment gateway degraded | Dashboard hiển thị circuit state hoặc cảnh báo payment temporarily unavailable. |
-| Audit log ghi lỗi | Không chặn thao tác user nếu thay đổi chính đã commit, nhưng ghi system alert để điều tra. |
+  * Tổng số workshop.
+  * Tổng số người dùng.
+  * Tổng số lượt đăng ký.
+  * Tỷ lệ check-in.
+  * Trạng thái workshop.
+* Hiển thị dữ liệu theo thời gian hoặc theo workshop.
+
+### Quản lý workshop và phòng
+
+* Tạo, cập nhật, hủy workshop.
+* Quản lý thông tin phòng tổ chức.
+* Gán phòng cho workshop.
+* Theo dõi trạng thái workshop:
+
+  * `DRAFT`
+  * `PUBLISHED`
+  * `CANCELLED`
+  * `COMPLETED`
+
+### Quản lý người dùng
+
+* Xem danh sách người dùng.
+* Tạo tài khoản nhân sự/admin.
+* Cập nhật:
+
+  * Role.
+  * Trạng thái tài khoản.
+* Khóa hoặc mở khóa tài khoản.
+
+### Theo dõi import sinh viên
+
+* Theo dõi lịch sử import dữ liệu sinh viên.
+* Xem trạng thái import:
+
+  * Thành công.
+  * Thất bại.
+  * Đang xử lý.
+* Hiển thị lỗi dữ liệu nếu import thất bại.
+
+### Theo dõi AI Summary
+
+* Xem trạng thái tạo AI summary cho workshop.
+* Theo dõi:
+
+  * Đã xử lý.
+  * Đang xử lý.
+  * Thất bại.
+* Xem nội dung summary đã sinh.
+
+## Phân quyền
+
+| Vai trò         | Quyền                                                     |
+| --------------- | --------------------------------------------------------- |
+| `ADMIN`         | Toàn quyền quản trị hệ thống                              |
+| `ORGANIZER`     | Quản lý workshop, phòng, AI summary và thống kê liên quan |
+| `CHECKIN_STAFF` | Không được truy cập trang quản trị                        |
+| `STUDENT`       | Không được truy cập trang quản trị                        |
+
+
+## Lỗi và xử lý
+
+* User không đủ quyền truy cập admin: 403.
+* Dữ liệu nghiệp vụ lỗi vẫn phải có phản hồi rõ ràng theo chuẩn API.
 
 ## Ràng buộc
 
-- Admin Web không phải lớp bảo mật duy nhất; backend phải enforce quyền.
-- Các thao tác tạo/sửa/hủy workshop, đổi role, import CSV, payment override phải có audit log.
-- Dashboard thống kê có thể near real-time, không nhất thiết realtime từng giây.
-- Chỉ ADMIN được quản lý user/role toàn hệ thống.
-- ORGANIZER chỉ xem/sửa workshop thuộc phạm vi được giao.
+* Backend RBAC là lớp bảo vệ bắt buộc.
+* Các thao tác quan trọng cần audit log.
 
 ## Tiêu chí chấp nhận
 
-- [ ] Given organizer đăng nhập, When mở admin dashboard, Then xem được workshop được phân quyền.
-- [ ] Given student mở admin URL, When request API, Then nhận 403.
-- [ ] Given organizer hủy workshop, When thao tác thành công, Then audit log được ghi và notification event được publish.
-- [ ] Given admin xem thống kê, When chọn workshop, Then thấy registered_count, checked_in_count, no_show_count.
-- [ ] Given CSV import có dòng lỗi, When admin mở import detail, Then thấy row_number và error_message.
-- [ ] Given admin thay đổi role user, When lưu, Then audit log ghi old/new values.
+* Role đúng truy cập đúng màn hình/endpoint.
+* Role sai bị chặn nhất quán ở cả web guard và API.
+
+

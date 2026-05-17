@@ -47,12 +47,12 @@ paymentRouter.get(
       const responseCode = String(req.query.vnp_ResponseCode || "");
 
       if (result?.ok && responseCode === "00") {
-        return res.redirect("http://localhost:5173/payment-success");
+        return res.redirect(`${process.env.APP_ORIGIN}/payment-success`);
       }
     } catch {
       // Do not expose internal verification errors on browser redirect.
     }
 
-    return res.redirect("http://localhost:5173/payment-failed");
+    return res.redirect(`${process.env.APP_ORIGIN}/payment-failed`);
   })
 );

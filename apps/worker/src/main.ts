@@ -7,7 +7,6 @@ import { processReminderScan, scheduleReminderScans } from "./processors/reminde
 import { processPayment } from "./processors/payment.processor.js";
 import { processAiSummary } from "./processors/ai-summary.processor.js";
 import { processStudentImport } from "./processors/student-import.processor.js";
-import { processCheckinSync } from "./processors/checkin-sync.processor.js";
 import { processWorkshopStatus } from "./processors/workshop-status.processor.js";
 
 const workers = [
@@ -24,7 +23,6 @@ const workers = [
   new Worker("payments", processPayment, { connection: redisConnection, concurrency: 2 }),
   new Worker("ai-summary", processAiSummary, { connection: redisConnection, concurrency: 2 }),
   new Worker("student-import", processStudentImport, { connection: redisConnection, concurrency: 1 }),
-  new Worker("checkin-sync", processCheckinSync, { connection: redisConnection, concurrency: 2 }),
   new Worker("workshops", processWorkshopStatus, { connection: redisConnection, concurrency: 1 })
 ];
 

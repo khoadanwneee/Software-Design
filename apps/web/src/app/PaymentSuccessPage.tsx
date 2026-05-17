@@ -3,12 +3,11 @@ import { Link } from "react-router-dom";
 export function PaymentSuccessPage() {
   return (
     <section className="panel">
-      <h1>Thanh toan thanh cong</h1>
-      <p>Giao dich da duoc ghi nhan. Ban co the xem ma QR trong trang dang ky.</p>
+      <h1>Payment successful</h1>
+      <p>Your transaction has been recorded. You can view your QR code on the registration page.</p>
       <Link className="button" to="/workshops">
-        Ve danh sach workshop
+        Back to workshop list
       </Link>
     </section>
   );
 }
-

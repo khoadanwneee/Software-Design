@@ -20,7 +20,6 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: "student1@unihub.local", password: "password123" }
   });
 
   if (user) {

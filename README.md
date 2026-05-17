@@ -4,21 +4,19 @@ UniHub Workshop is a TypeScript monorepo scaffold for the workshop registration,
 
 The repo currently uses `blueprint/` as the source of truth rather than `blueprints/`.
 
-## Why PWA Instead Of React Native
+## Why Mobile + Web
 
-UniHub needs a student web app, an organizer/admin web app, and a phone-friendly check-in interface. A React PWA keeps those surfaces in one deployable client-side app:
+UniHub needs a student-facing surface, an organizer/admin web app, and a phone-first check-in experience. The current setup uses:
 
-- runs on desktop and mobile browsers;
-- can be installed to the home screen;
-- can use the camera through the browser for QR scanning;
-- can persist offline check-ins in IndexedDB;
-- can sync pending check-ins when the network returns.
+- a React web app for admin/organizer and student flows;
+- a React Native (Expo) mobile app optimized for check-in.
 
-This avoids a separate React Native app while still supporting the mobile check-in workflow required by the blueprint.
+This keeps the admin experience on the web while providing a dedicated mobile workflow for scanning and on-site operations.
 
 ## Architecture
 
-- `apps/web`: React + Vite client-side PWA.
+- `apps/web`: React + Vite web app (admin/organizer/student).
+- `apps/mobile`: Expo + React Native check-in app.
 - `apps/api`: Node.js + Express REST API.
 - `apps/worker`: BullMQ workers for notification, payment reconciliation, AI summary, CSV import, and check-in maintenance.
 - `packages/db`: Prisma schema, migration, seed, and Prisma client export.
@@ -31,7 +29,8 @@ PostgreSQL is the source of truth for registrations, payment state, QR/check-in 
 
 ## Tech Stack
 
-- Frontend: React, Vite, TypeScript, React Router, TanStack Query, React Hook Form, Zod, Dexie, `html5-qrcode`.
+- Frontend (web): React, Vite, TypeScript, React Router, TanStack Query, React Hook Form, Zod.
+- Frontend (mobile): Expo, React Native, TypeScript, `expo-camera`.
 - Backend: Node.js, Express, TypeScript, Prisma, PostgreSQL, Redis, Zod, JWT, Helmet, CORS, Swagger.
 - Worker: BullMQ on Redis.
 - Local development: Docker Compose.
@@ -44,6 +43,7 @@ PostgreSQL is the source of truth for registrations, payment state, QR/check-in 
 ├── blueprint/
 ├── apps/
 │   ├── web/
+│   ├── mobile/
 │   ├── api/
 │   └── worker/
 ├── packages/
@@ -104,16 +104,18 @@ Run services:
 pnpm --filter @unihub/api dev
 pnpm --filter @unihub/worker dev
 pnpm --filter @unihub/web dev
+pnpm --filter @unihub/mobile dev
 ```
 
 Default URLs:
 
-- Web PWA: `http://localhost:5173`
-- Web PWA: `http://192.168.1.5:5173`
+- Web app: `http://localhost:5173`
+- Web app: `http://192.168.1.5:5173`
 - API: `http://192.168.1.5:4000/api`
 - API docs: `http://192.168.1.5:4000/docs`
 - Health: `http://192.168.1.5:4000/health`
 - Mailpit: `http://localhost:8025`
+- Mobile: Expo dev server opens in the terminal when running `pnpm --filter @unihub/mobile dev`.
 
 ## Run AI Summary Locally
 
@@ -307,21 +309,19 @@ After changing `.env`, always restart the worker because it reads `NGROK_AI_SUMM
 
 ## Demo Accounts
 
-All seed accounts use password `password123`.
+Student accounts (from `tmp/student-csv/students_valid.csv`) use password format `KHTN@` + last 2 digits of student code.
 
-| Role | Email |
-|---|---|
-| ADMIN | `admin@unihub.local` |
-| ORGANIZER | `organizer@unihub.local` |
-| CHECKIN_STAFF | `staff@unihub.local` |
-| STUDENT | `student1@unihub.local` |
-| STUDENT | `student2@unihub.local` |
-| STUDENT | `student3@unihub.local` |
-| STUDENT | `student4@unihub.local` |
+| Role | Email | Password |
+|---|---|---|
+| STUDENT | `sv202610@unihub.local` | `KHTN@10` |
+| STUDENT | `sv202611@unihub.local` | `KHTN@11` |
+| STUDENT | `sv202612@unihub.local` | `KHTN@12` |
 
-## PWA Install
+## Mobile Setup
 
-On Android Chrome or desktop Chrome/Edge, open `http://192.168.1.5:5173`, then use the browser install button. On iOS Safari, use Share → Add to Home Screen. Camera QR scanning requires HTTPS in production; localhost is allowed by browsers for development.
+1. Install Expo Go on your phone (iOS/Android).
+2. Run `pnpm --filter @unihub/mobile dev`.
+3. Scan the QR code shown in the terminal to open the app.
 
 ## Flow Tests
 

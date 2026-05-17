@@ -409,6 +409,13 @@ export interface RegistrationDto {
   paymentUrl?: string | null;
 }
 
+export interface MyRegistrationDto {
+  id: string;
+  workshopId: string;
+  status: RegistrationStatus;
+  checkedInAt?: string | null;
+}
+
 export interface CreateRegistrationRequest {
   workshopId: string;
   idempotencyKey: string;

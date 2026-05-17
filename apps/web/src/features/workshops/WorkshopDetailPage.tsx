@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CreditCard, Ticket } from "lucide-react";
 import { ApiClientError } from "@unihub/api-client";
-import { AiSummaryStatus, Role, type WorkshopDto } from "@unihub/shared-types";
+import { AiSummaryStatus, Role, type MyRegistrationDto, type WorkshopDto } from "@unihub/shared-types";
 import { createClientId } from "@unihub/shared-utils";
 import { api } from "../../lib/api";
 import { useAuth } from "../auth/AuthProvider";
@@ -54,7 +54,8 @@ export function WorkshopDetailPage() {
         queryClient.setQueryData(["my-registration", workshopId], {
           id: registrationId,
           workshopId,
-          status: "CONFIRMED"
+          status: "CONFIRMED",
+          checkedInAt: null
         });
       }}
     />
@@ -73,7 +74,7 @@ function WorkshopDetailContent({
   id: string;
   workshop: WorkshopDto;
   userRoles: Role[];
-  myRegistration: { id: string; workshopId: string; status: string } | null;
+  myRegistration: MyRegistrationDto | null;
   message: string | null;
   setMessage: (message: string | null) => void;
   onRegistrationConfirmed: (registrationId: string, workshopId: string) => void;
@@ -84,6 +85,7 @@ function WorkshopDetailContent({
   const isStudent = userRoles.includes(Role.STUDENT);
   const canRegister = isStudent && seat.status === "PUBLISHED" && seat.remainingSeats > 0;
   const isRegisteredConfirmed = myRegistration?.status === "CONFIRMED";
+  const isCheckedIn = Boolean(myRegistration?.checkedInAt);
   const isPendingPayment = myRegistration?.status === "PENDING_PAYMENT";
 
   const registerFree = useMutation({
@@ -109,7 +111,7 @@ function WorkshopDetailContent({
         navigate(`/registrations/${registration.id}/qr`);
         return;
       }
-      setMessage("Ban da co giao dich thanh toan cho workshop nay. Vui long kiem tra trang QR.");
+      setMessage("You already have a payment transaction for this workshop. Please check your QR page.");
     },
     onError: (error) => setMessage(error instanceof ApiClientError ? error.message : "Payment failed")
   });
@@ -121,13 +123,13 @@ function WorkshopDetailContent({
       <p>{workshop.description}</p>
       <div className="detail-grid">
         <div className="panel">
-          <h2>Thong tin</h2>
-          <p>Phong: {workshop.room.name}</p>
-          <p>Thoi gian: {new Date(workshop.startTime).toLocaleString("vi-VN")}</p>
+          <h2>Details</h2>
+          <p>Room: {workshop.room.name}</p>
+          <p>Time: {new Date(workshop.startTime).toLocaleString("en-US")}</p>
           <p>
-            Cho: {seat.registeredCount}/{seat.capacity}
+            Seats: {seat.registeredCount}/{seat.capacity}
           </p>
-          <p>Dien gia: {workshop.speakers.map((speaker) => speaker.fullName).join(", ")}</p>
+          <p>Speakers: {workshop.speakers.map((speaker) => speaker.fullName).join(", ")}</p>
         </div>
         <div className="panel">
           <div className="panel-title-row">
@@ -143,26 +145,28 @@ function WorkshopDetailContent({
       </div>
       {message ? <p className="notice">{message}</p> : null}
 
-      {isRegisteredConfirmed ? (
+      {isRegisteredConfirmed && isCheckedIn ? (
+        <p className="notice">Checked in</p>
+      ) : isRegisteredConfirmed ? (
         <Link className="button" to={`/registrations/${myRegistration.id}/qr`}>
-          <Ticket size={18} /> Xem QR
+          <Ticket size={18} /> View QR
         </Link>
       ) : isPendingPayment ? (
         <button onClick={() => registerPaid.mutate()} disabled={registerPaid.isPending}>
-          <CreditCard size={18} /> Tiep tuc thanh toan
+          <CreditCard size={18} /> Continue payment
         </button>
       ) : canRegister ? (
         workshop.priceAmount > 0 ? (
           <button onClick={() => registerPaid.mutate()} disabled={registerPaid.isPending}>
-            <CreditCard size={18} /> Dang ky co phi
+            <CreditCard size={18} /> Register (paid)
           </button>
         ) : (
           <button onClick={() => registerFree.mutate()} disabled={registerFree.isPending}>
-            <Ticket size={18} /> Dang ky mien phi
+            <Ticket size={18} /> Register (free)
           </button>
         )
       ) : (
-        <p className="notice">{seat.remainingSeats <= 0 ? "Het cho." : "Workshop khong mo dang ky."}</p>
+        <p className="notice">{seat.remainingSeats <= 0 ? "No seats left." : "Workshop is not open for registration."}</p>
       )}
     </article>
   );
@@ -177,8 +181,8 @@ function summaryDisplay(workshop: WorkshopDto) {
     workshop.aiSummary?.status === AiSummaryStatus.PENDING ||
     workshop.aiSummary?.status === AiSummaryStatus.PROCESSING
   ) {
-    return "Đang tạo tóm tắt AI.";
+    return "Generating AI summary.";
   }
 
-  return "Chưa có tóm tắt AI.";
+  return "No AI summary yet.";
 }

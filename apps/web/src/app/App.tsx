@@ -1,17 +1,12 @@
-import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Role } from "@unihub/shared-types";
 import { Shell } from "../components/Shell";
 import { RoleGuard } from "../components/RoleGuard";
-import { useAuth } from "../features/auth/AuthProvider";
-import { syncPendingCheckins } from "../features/offline/sync";
 import { LoginPage } from "../features/auth/LoginPage";
 import { WorkshopListPage } from "../features/workshops/WorkshopListPage";
 import { WorkshopDetailPage } from "../features/workshops/WorkshopDetailPage";
 import { NotificationsPage } from "../features/notifications/NotificationsPage";
 import { RegistrationQrPage } from "../features/registrations/RegistrationQrPage";
-import { CheckinPage } from "../features/checkin/CheckinPage";
-import { CheckinQueuePage } from "../features/checkin/CheckinQueuePage";
 import { AdminDashboardPage } from "../features/admin/AdminDashboardPage";
 import { AdminWorkshopsPage } from "../features/admin/AdminWorkshopsPage";
 import { AdminWorkshopFormPage } from "../features/admin/AdminWorkshopFormPage";
@@ -25,22 +20,6 @@ import { PaymentSuccessPage } from "./PaymentSuccessPage";
 import { PaymentFailedPage } from "./PaymentFailedPage";
 
 export function App() {
-  const { user } = useAuth();
-
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-    const onOnline = () => {
-      void syncPendingCheckins();
-    };
-    window.addEventListener("online", onOnline);
-    if (navigator.onLine) {
-      void syncPendingCheckins();
-    }
-    return () => window.removeEventListener("online", onOnline);
-  }, [user]);
-
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
@@ -58,22 +37,6 @@ export function App() {
         <Route path="/workshops/:id" element={<WorkshopDetailPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/registrations/:id/qr" element={<RegistrationQrPage />} />
-        <Route
-          path="/checkin"
-          element={
-            <RoleGuard roles={[Role.CHECKIN_STAFF, Role.ORGANIZER, Role.ADMIN]}>
-              <CheckinPage />
-            </RoleGuard>
-          }
-        />
-        <Route
-          path="/checkin/queue"
-          element={
-            <RoleGuard roles={[Role.CHECKIN_STAFF, Role.ORGANIZER, Role.ADMIN]}>
-              <CheckinQueuePage />
-            </RoleGuard>
-          }
-        />
         <Route
           path="/admin"
           element={

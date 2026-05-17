@@ -34,13 +34,13 @@ export function AdminAiSummaryPage() {
     }
 
     if (aiSummary.data.status === AiSummaryStatus.DONE) {
-      setMessage("AI summary đã hoàn tất và đã được lưu vào workshop.");
+      setMessage("AI summary is complete and has been saved to the workshop.");
       void queryClient.invalidateQueries({ queryKey: ["workshops"] });
       void queryClient.invalidateQueries({ queryKey: ["workshop", activeUpload.workshopId] });
     }
 
     if (aiSummary.data.status === AiSummaryStatus.FAILED) {
-      setMessage("AI summary thất bại. Vui lòng kiểm tra worker/ngrok hoặc upload lại PDF.");
+      setMessage("AI summary failed. Please check worker/ngrok or upload the PDF again.");
     }
   }, [activeUpload, aiSummary.data, queryClient]);
 
@@ -59,7 +59,7 @@ export function AdminAiSummaryPage() {
       const uploadForm = new FormData();
       uploadForm.set("file", file);
       const result = await api.aiSummaryApi.uploadPdf(workshopId, uploadForm);
-      setMessage("PDF đã được nhận. AI summary đang xử lý, bạn có thể ở lại trang này để xem kết quả.");
+      setMessage("PDF received. AI summary is processing, you can stay on this page to see the result.");
       setActiveUpload({ aiSummaryId: result.aiSummaryId, workshopId });
       await queryClient.invalidateQueries({ queryKey: ["workshops"] });
       await queryClient.invalidateQueries({ queryKey: ["workshop", workshopId] });
@@ -80,7 +80,7 @@ export function AdminAiSummaryPage() {
             <option value="">Select workshop</option>
             {workshops.data?.map((workshop) => (
               <option key={workshop.id} value={workshop.id}>
-                {workshop.aiSummary?.status === AiSummaryStatus.DONE ? "✓ " : ""}
+                {workshop.aiSummary?.status === AiSummaryStatus.DONE ? "? " : ""}
                 {workshop.title}
               </option>
             ))}

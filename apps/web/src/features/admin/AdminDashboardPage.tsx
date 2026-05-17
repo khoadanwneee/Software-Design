@@ -11,7 +11,7 @@ export function AdminDashboardPage() {
       <h1>Admin</h1>
       <div className="grid compact">
         <Link className="panel nav-panel" to="/admin/workshops">
-          Workshop CRUD
+          Workshop
         </Link>
         <Link className="panel nav-panel" to="/admin/rooms">
           Rooms

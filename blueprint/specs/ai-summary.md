@@ -2,48 +2,38 @@
 
 ## Mô tả
 
-Tính năng AI Summary cho phép ban tổ chức upload PDF giới thiệu workshop. Hệ thống extract text, làm sạch văn bản, gửi sang AI Model Service để tạo bản tóm tắt và hiển thị trên trang chi tiết workshop.
+Organizer/Admin upload PDF workshop để hệ thống tạo tóm tắt AI bất đồng bộ.
 
 ## Luồng chính
 
-1. Organizer tạo/cập nhật workshop và upload PDF.
-2. Backend validate file type PDF, size limit và quyền ORGANIZER/ADMIN.
-3. Backend lưu file vào Object Storage hoặc local object storage.
-4. Backend tạo `uploaded_files` và `ai_summaries` status PENDING.
-5. Backend publish `ai_summary.requested` vào Message Broker.
-6. Worker consume job.
-7. Worker tải PDF, extract text.
-8. Worker clean text: bỏ header/footer rác, normalize whitespace, giới hạn độ dài.
-9. Worker gọi AI Service với prompt tóm tắt tiếng Việt.
-10. Worker lưu summary status DONE.
-11. Student xem workshop detail sẽ thấy summary nếu DONE; nếu chưa xong thì thấy trạng thái đang xử lý hoặc mô tả gốc.
+1. Organizer/Admin tải lên tài liệu PDF của workshop từ giao diện quản trị.
+2. Hệ thống kiểm tra tính hợp lệ của file (định dạng PDF, dung lượng cho phép, nội dung không rỗng).
+3. Hệ thống lưu trữ tài liệu và tạo yêu cầu tóm tắt ở trạng thái `PENDING`.
+4. Yêu cầu được đưa vào hàng đợi xử lý bất đồng bộ.
+5. Worker trích xuất nội dung, làm sạch dữ liệu, gọi AI để tạo tóm tắt.
+6. Hệ thống cập nhật trạng thái `PROCESSING` trong lúc xử lý và `DONE`/`FAILED` khi kết thúc.
 
-## Kịch bản lỗi
+## Trạng thái chính
 
-| Lỗi | Cách hệ thống phản ứng |
-| --- | --- |
-| File không phải PDF | Reject upload, trả 400. |
-| File quá lớn | Reject upload theo size limit. |
-| PDF hỏng hoặc không extract được text | `ai_summaries` chuyển FAILED, lưu error_message. |
-| AI Service timeout | Retry có backoff; sau max attempts chuyển FAILED. |
-| AI trả nội dung rỗng | Mark FAILED hoặc NEEDS_REVIEW. |
-| Worker down | Job nằm trong queue và xử lý lại khi worker hồi phục. |
-| AI lỗi | Trang workshop vẫn hoạt động, hiển thị mô tả gốc. |
+* `PENDING`
+* `PROCESSING`
+* `DONE`
+* `FAILED`
+
+## Lỗi và xử lý
+
+* PDF không hợp lệ/quá kích thước: từ chối ngay khi upload.
+* PDF ít nội dung để tóm tắt: đánh dấu `FAILED` và ghi nhận lý do.
+* Worker/AI lỗi: hệ thống tự động thử lại theo chính sách; hết số lần thử thì `FAILED`, không ảnh hưởng luồng workshop/registration khác.
 
 ## Ràng buộc
 
-- AI processing phải async, không chặn request tạo/cập nhật workshop.
-- Không gửi dữ liệu nhạy cảm không cần thiết sang AI.
-- Cần timeout cho AI request.
-- Cần lưu model/prompt version nếu muốn audit chất lượng summary.
-- Organizer có thể sửa mô tả gốc; AI summary chỉ là nội dung hỗ trợ.
-- AI lỗi không làm hỏng workshop hoặc registration.
+* Luồng AI phải async.
+* Cần lưu thông tin để truy vết (file, status, attempts, error message).
 
 ## Tiêu chí chấp nhận
 
-- [ ] Given organizer upload PDF hợp lệ, When lưu workshop, Then job AI summary được tạo.
-- [ ] Given worker xử lý thành công, When student xem detail, Then thấy summary.
-- [ ] Given AI timeout, When worker retry hết số lần, Then summary status FAILED và workshop vẫn xem được.
-- [ ] Given file sai định dạng, When upload, Then backend trả 400.
-- [ ] Given summary đang PENDING, When student xem detail, Then app hiển thị trạng thái đang xử lý hoặc mô tả gốc.
-- [ ] Given worker restart, When job chưa xử lý xong, Then job không mất.
+* Upload hợp lệ tạo job.
+* Worker thành công thì workshop detail hiển thị summary.
+* Worker thất bại vẫn giữ hệ thống hoạt động bình thường.
+* Khi job chưa xử lý xong thì job không bị mất.

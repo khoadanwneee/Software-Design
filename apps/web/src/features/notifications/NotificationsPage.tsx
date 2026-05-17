@@ -21,7 +21,7 @@ export function NotificationsPage() {
   const notifications = useQuery({
     queryKey: ["notifications", status, page],
     queryFn: () => api.notificationApi.list({ status, page, limit: pageSize }),
-    refetchInterval: 30_000
+    refetchInterval: 3000
   });
 
   const markAll = useMutation({
